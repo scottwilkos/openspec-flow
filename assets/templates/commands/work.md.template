@@ -1,0 +1,37 @@
+# Generate OpenSpec Work Brief
+
+Generate a comprehensive work brief for an OpenSpec change.
+
+## Task
+
+1. Ask the user for the CHANGE_ID if not provided
+2. Run the work brief generation:
+
+```bash
+npm run openspec-flow:work -- <CHANGE_ID>
+```
+
+If that fails, run directly:
+
+```bash
+npx tsx tooling/openspec-flow/src/index.ts work <CHANGE_ID>
+```
+
+3. After generation, automatically read and display the generated work brief:
+
+```
+openspec/changes/<CHANGE_ID>/work-brief.md
+```
+
+4. Summarize the key points:
+   - Summary from proposal
+   - Number of tasks
+   - Impacted specs
+   - Tech stack requirements
+   - Critical constraints
+
+5. Offer next steps:
+   "The work brief is ready! Would you like me to:
+   - Implement this change following the work brief
+   - Review specific sections in detail
+   - Start with a particular task"

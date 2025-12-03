@@ -1,0 +1,228 @@
+# Implement OpenSpec Change
+
+Implement an OpenSpec change using Claude-Flow autonomous multi-agent orchestration.
+
+## CHANGE_ID: $ARGUMENTS
+
+---
+
+## MANDATORY EXECUTION RULES - NO EXCEPTIONS
+
+**YOU ARE FORBIDDEN FROM:**
+- Writing code directly yourself
+- Editing files without spawning agents
+- Skipping swarm initialization
+- "Manually" implementing anything
+- Taking shortcuts or "just doing it yourself"
+- Reading files and then implementing - that's what agents are for
+
+**YOU MUST:**
+- Initialize the swarm FIRST (Step 2)
+- Spawn task-orchestrator agent (Step 3)
+- Let agents do ALL the work
+- Only monitor and report progress
+
+**IF YOU SKIP THESE STEPS, YOU ARE FAILING YOUR CORE RESPONSIBILITY.**
+
+The entire point of this system is multi-agent orchestration. If you implement directly, you defeat the purpose and waste the infrastructure that was built.
+
+---
+
+## EXECUTION SEQUENCE (FOLLOW EXACTLY)
+
+### Step 1: Load Context (READ ONLY - NO IMPLEMENTATION)
+
+Load these files to pass to the orchestrator:
+
+```
+openspec/changes/$ARGUMENTS/work-brief.md (generate with `openspec-flow work $ARGUMENTS` if missing)
+openspec/changes/$ARGUMENTS/proposal.md
+openspec/changes/$ARGUMENTS/tasks.md
+CLAUDE.md
+CLAUDE-FLOW.md
+```
+
+### Step 2: Initialize Swarm (MANDATORY - DO THIS NOW)
+
+**IMMEDIATELY** call this MCP tool - no exceptions:
+
+```
+mcp__claude-flow__swarm_init({
+  topology: "hierarchical",
+  maxAgents: 8,
+  strategy: "adaptive"
+})
+```
+
+**DO NOT PROCEED WITHOUT SWARM INITIALIZATION.**
+
+### Step 3: Spawn Task Orchestrator (MANDATORY - DO THIS NOW)
+
+**IMMEDIATELY** spawn the orchestrator agent using the Task tool:
+
+```
+Task({
+  subagent_type: "task-orchestrator",
+  description: "Orchestrate OpenSpec $ARGUMENTS implementation",
+  prompt: <FULL ORCHESTRATOR PROMPT BELOW>
+})
+```
+
+### Step 4: Monitor Progress
+
+While orchestrator runs:
+- Check `mcp__claude-flow__swarm_status` periodically
+- Report agent activity to user
+- Do NOT intervene unless orchestrator requests help
+
+### Step 5: Collect Results & Cleanup
+
+After orchestrator completes:
+1. Receive final report from orchestrator
+2. Create flow-log.md in `openspec/changes/$ARGUMENTS/`
+3. Call `mcp__claude-flow__swarm_destroy` to cleanup
+4. Report summary to user
+
+---
+
+## ORCHESTRATOR PROMPT (COPY THIS EXACTLY)
+
+The task-orchestrator agent receives this prompt. Include the FULL content of work-brief.md, CLAUDE.md architecture section, and CLAUDE-FLOW.md:
+
+```
+You are the autonomous Task Orchestrator for OpenSpec change: $ARGUMENTS
+
+## YOUR MISSION
+Implement this change by spawning and coordinating specialized agents. You do NOT write code yourself - you spawn agents who write code.
+
+## WORK BRIEF
+<INSERT FULL work-brief.md CONTENT HERE>
+
+## ARCHITECTURE PATTERNS (from CLAUDE.md)
+<INSERT CLAUDE.md ARCHITECTURE SECTION HERE>
+
+## SWARM CONFIGURATION (from CLAUDE-FLOW.md)
+<INSERT CLAUDE-FLOW.md AGENT TYPES AND COORDINATION PATTERNS HERE>
+
+## YOUR EXECUTION PROTOCOL
+
+### Phase 1: Planning
+1. Analyze work brief and break into discrete tasks
+2. Identify dependencies between tasks
+3. Group tasks into parallel batches where possible
+
+### Phase 2: Agent Spawning & Execution
+For each task group, spawn agents using Task tool:
+
+**For code implementation:**
+Task({ subagent_type: "coder", prompt: "<specific implementation task>" })
+
+**For testing:**
+Task({ subagent_type: "tester", prompt: "<specific test creation task>" })
+
+**For review:**
+Task({ subagent_type: "reviewer", prompt: "<specific review task>" })
+
+### Phase 3: Validation
+After each phase:
+1. Run `{{build.command}}` via Bash tool to verify compilation
+2. Run type checks for frontend changes
+3. Spawn reviewer agent to validate patterns
+
+### Phase 4: Error Recovery
+If an agent fails:
+1. Analyze the error
+2. Spawn a new coder agent with fixer instructions
+3. Retry up to 2 times
+4. Escalate to user if still failing
+
+### Phase 5: Final Report
+When complete, provide:
+- Summary of all changes made
+- List of files created/modified
+- Build/test results
+- Any issues encountered and resolutions
+- Compliance verification
+
+## CRITICAL RULES FOR YOU (ORCHESTRATOR)
+- You MUST spawn agents for ALL code changes
+- You coordinate and validate, agents implement
+- Spawn multiple agents in PARALLEL when tasks are independent
+- Use Task tool with appropriate subagent_type for each task
+- Available agent types: coder, tester, reviewer, researcher, system-architect
+
+## BEGIN EXECUTION NOW
+Start by analyzing the work brief and creating your implementation plan. Then spawn your first batch of agents.
+```
+
+---
+
+## VERIFICATION CHECKLIST
+
+Before considering this command complete, verify:
+
+- [ ] `mcp__claude-flow__swarm_init` was called
+- [ ] Task tool spawned task-orchestrator agent
+- [ ] Orchestrator spawned child agents (coder, tester, reviewer)
+- [ ] NO direct file edits were made by the main assistant
+- [ ] Flow log was created at `openspec/changes/$ARGUMENTS/flow-log.md`
+- [ ] `mcp__claude-flow__swarm_destroy` was called for cleanup
+
+**If any checkbox is unchecked, the command was executed incorrectly.**
+
+---
+
+## FLOW LOG TEMPLATE
+
+Create this file at `openspec/changes/$ARGUMENTS/flow-log.md`:
+
+```markdown
+# Implementation Flow Log: $ARGUMENTS
+
+**Date**: <timestamp>
+**Swarm Topology**: hierarchical
+**Total Agents Spawned**: <count>
+
+## Execution Timeline
+
+### Swarm Initialization
+- Swarm ID: <id>
+- Status: <success/failed>
+
+### Orchestrator Agent
+- Spawned: <timestamp>
+- Completed: <timestamp>
+- Child Agents: <count>
+
+### Agent Activity
+| Agent Type | Task | Status | Duration |
+|------------|------|--------|----------|
+| coder | <task> | <status> | <time> |
+| tester | <task> | <status> | <time> |
+| reviewer | <task> | <status> | <time> |
+
+## Files Modified
+- <list of files>
+
+## Validation Results
+- Build: <pass/fail>
+- Type Check: <pass/fail>
+- Tests: <pass/fail>
+
+## Issues & Resolutions
+- <any issues>
+
+## Summary
+<overall outcome>
+```
+
+---
+
+## Post-Implementation
+
+After the task-orchestrator completes:
+
+1. **Review Results**: Examine orchestrator's final report
+2. **Verify Completion**: All work brief tasks marked complete
+3. **Update tasks.md**: Mark completed tasks with `[x]`
+4. **Next Steps**: Proceed to verify with `/openspec-flow:verify`

@@ -1,0 +1,348 @@
+# OpenSpec Implementation Flow
+# Automates the implementation of OpenSpec changes using Claude-Flow
+
+name: openspec-implementation
+description: |
+  Implements OpenSpec changes following {{project.name}} architecture:
+  - {{tech.runtime}}
+  - {{tech.orchestration}}
+  - {{tech.database}}
+  - {{tech.messaging}}
+  - {{tech.storage}}
+
+version: 1.0.0
+
+inputs:
+  change_id:
+    type: string
+    required: true
+    description: OpenSpec change identifier
+
+  work_brief:
+    type: string
+    required: true
+    description: Path to generated work-brief.md
+
+  claude_md:
+    type: string
+    required: true
+    description: Path to CLAUDE.md
+
+  project_context:
+    type: string
+    required: true
+    description: Path to project-context.md
+
+outputs:
+  flow_log:
+    type: string
+    description: Path to flow-log.md
+
+  files_modified:
+    type: array
+    description: List of modified files
+
+  summary:
+    type: string
+    description: Implementation summary
+
+  documentation:
+    type: object
+    description: Auto-generated documentation paths
+    properties:
+      decisions_path:
+        type: string
+        description: Path to decisions.md
+      implementation_notes_path:
+        type: string
+        description: Path to implementation-notes.md
+      priorities_path:
+        type: string
+        description: Path to priorities.md
+      status_path:
+        type: string
+        description: Path to status.md
+      deferred_path:
+        type: string
+        description: Path to deferred.md (if incomplete)
+      lessons_path:
+        type: string
+        description: Path to lessons-learned.md
+      archive_path:
+        type: string
+        description: Path to archive folder (if archived)
+
+  completion_metrics:
+    type: object
+    description: Task completion metrics
+    properties:
+      total_tasks:
+        type: integer
+      completed:
+        type: integer
+      deferred:
+        type: integer
+      completion_percent:
+        type: number
+
+phases:
+  # Phase 1: Context Loader
+  - name: context-loader
+    description: Load all context documents into shared memory
+    agent_type: researcher
+    system_prompt_file: ../prompts/openspec-flow/context-loader.md
+    inputs:
+      - work_brief_path: "{{curly_open}} inputs.work_brief {{curly_close}}"
+      - claude_md_path: "{{curly_open}} inputs.claude_md {{curly_close}}"
+      - project_context_path: "{{curly_open}} inputs.project_context {{curly_close}}"
+    outputs:
+      - context_summary: string
+      - key_requirements: array
+      - tech_stack: object
+
+  # Phase 2: Implementation Planner
+  - name: planner
+    description: Create detailed implementation plan
+    agent_type: architect
+    system_prompt_file: ../prompts/openspec-flow/planner.md
+    depends_on:
+      - context-loader
+    inputs:
+      - context: "{{curly_open}} phases.context-loader.outputs.context_summary {{curly_close}}"
+      - requirements: "{{curly_open}} phases.context-loader.outputs.key_requirements {{curly_close}}"
+      - tech_stack: "{{curly_open}} phases.context-loader.outputs.tech_stack {{curly_close}}"
+      - change_id: "{{curly_open}} inputs.change_id {{curly_close}}"
+    outputs:
+      - implementation_plan: object
+      - files_to_create: array
+      - files_to_modify: array
+      - migrations_needed: boolean
+      - messaging_changes: boolean
+    documentation:
+      # Auto-capture: decisions, initial priorities, session start
+      auto_capture:
+        - decisions
+        - priorities
+        - session_log
+      output_dir: "_docs/features/{{curly_open}} inputs.change_id {{curly_close}}"
+      initialize:
+        - decisions.md
+        - implementation-notes.md
+        - priorities.md
+
+  # Phase 3: Implementer
+  - name: implementer
+    description: Execute implementation plan
+    agent_type: coder
+    system_prompt_file: ../prompts/openspec-flow/implementer.md
+    depends_on:
+      - planner
+    inputs:
+      - plan: "{{curly_open}} phases.planner.outputs.implementation_plan {{curly_close}}"
+      - files_to_create: "{{curly_open}} phases.planner.outputs.files_to_create {{curly_close}}"
+      - files_to_modify: "{{curly_open}} phases.planner.outputs.files_to_modify {{curly_close}}"
+      - change_id: "{{curly_open}} inputs.change_id {{curly_close}}"
+    outputs:
+      - files_modified: array
+      - migrations_created: array
+      - tests_written: array
+      - implementation_notes: string
+    documentation:
+      # Auto-capture: patterns, gotchas, session logs, priority changes
+      auto_capture:
+        - patterns
+        - gotchas
+        - session_log
+        - priority_changes
+        - decisions
+      output_dir: "_docs/features/{{curly_open}} inputs.change_id {{curly_close}}"
+      detect_patterns:
+{{#each patterns}}
+        - {{this}}
+{{/each}}
+
+  # Phase 4: Reviewer
+  - name: reviewer
+    description: Review implementation against spec and architecture
+    agent_type: reviewer
+    system_prompt_file: ../prompts/openspec-flow/reviewer.md
+    depends_on:
+      - implementer
+    inputs:
+      - work_brief: "{{curly_open}} inputs.work_brief {{curly_close}}"
+      - files_modified: "{{curly_open}} phases.implementer.outputs.files_modified {{curly_close}}"
+      - implementation_notes: "{{curly_open}} phases.implementer.outputs.implementation_notes {{curly_close}}"
+      - context: "{{curly_open}} phases.context-loader.outputs.context_summary {{curly_close}}"
+      - change_id: "{{curly_open}} inputs.change_id {{curly_close}}"
+    outputs:
+      - review_passed: boolean
+      - issues_found: array
+      - recommendations: array
+      - compliance_check: object
+    documentation:
+      # Auto-capture: review findings, decision refinements
+      auto_capture:
+        - decisions
+        - session_log
+      output_dir: "_docs/features/{{curly_open}} inputs.change_id {{curly_close}}"
+
+  # Phase 5: Summarizer
+  - name: summarizer
+    description: Generate flow log, documentation finalization, and archive
+    agent_type: documenter
+    system_prompt_file: ../prompts/openspec-flow/summarizer.md
+    depends_on:
+      - reviewer
+    inputs:
+      - change_id: "{{curly_open}} inputs.change_id {{curly_close}}"
+      - plan: "{{curly_open}} phases.planner.outputs.implementation_plan {{curly_close}}"
+      - files_modified: "{{curly_open}} phases.implementer.outputs.files_modified {{curly_close}}"
+      - review: "{{curly_open}} phases.reviewer.outputs {{curly_close}}"
+    outputs:
+      - flow_log_path: string
+      - summary: string
+      - documentation:
+          status_path: string
+          deferred_path: string
+          lessons_path: string
+          archived: boolean
+          archive_path: string
+      - completion_metrics:
+          total_tasks: integer
+          completed: integer
+          deferred: integer
+          completion_percent: number
+    documentation:
+      # Finalization: status, deferred, lessons, archive
+      auto_capture:
+        - session_log
+      output_dir: "_docs/features/{{curly_open}} inputs.change_id {{curly_close}}"
+      finalize:
+        - status.md
+        - deferred.md
+        - lessons-learned.md
+      archive:
+        enabled: true
+        condition: "{{curly_open}} phases.reviewer.outputs.review_passed {{curly_close}}"
+        destination: "_docs/_archive/{{curly_open}} date {{curly_close}}-{{curly_open}} inputs.change_id {{curly_close}}"
+
+  # Phase 6: Verifier (optional, can run standalone)
+  - name: verifier
+    description: Comprehensive E2E and documentation verification
+    agent_type: reviewer
+    system_prompt_file: ../prompts/openspec-flow/verifier.md
+    depends_on:
+      - summarizer
+    optional: true
+    can_run_standalone: true
+    inputs:
+      - change_id: "{{curly_open}} inputs.change_id {{curly_close}}"
+      - flow_log: "{{curly_open}} phases.summarizer.outputs.flow_log_path {{curly_close}}"
+      - completion_metrics: "{{curly_open}} phases.summarizer.outputs.completion_metrics {{curly_close}}"
+    outputs:
+      - verification_status: string
+      - report_path: string
+      - gaps: array
+      - follow_ups: array
+    verification:
+      e2e_required: true
+      user_starts_app: true
+      playwright_mcp_required: true
+      build_verification:
+        build_command: "{{build.command}}"
+        type_check: true
+      documentation_check:
+        - flow-log.md
+        - lessons-learned.md
+        - decisions.md
+
+error_handling:
+  on_phase_failure:
+    - log_error: true
+    - continue_to_summarizer: true
+    - mark_incomplete: true
+
+logging:
+  level: info
+  output_dir: openspec-flow/changes/{{curly_open}} inputs.change_id {{curly_close}}/
+  flow_log_file: flow-log.md
+
+metadata:
+  author: {{project.name}} Team
+  created: 2025-11-15
+  updated: 2025-12-02
+  tags:
+    - openspec
+    - implementation
+    - auto-documentation
+    - learning-system
+
+# Documentation System Integration
+#
+# This flow now includes integrated auto-documentation:
+#
+# 1. PLANNER PHASE:
+#    - Initializes _docs/features/{change_id}/ folder
+#    - Creates decisions.md, implementation-notes.md, priorities.md
+#    - Auto-captures architectural decisions with trigger phrases
+#
+# 2. IMPLEMENTER PHASE:
+#    - Session logging (start/end with files, patterns, discoveries)
+#    - Pattern detection
+#    - Gotcha logging when errors/issues encountered
+#    - Priority tracking when tasks shift
+#    - **E2E VERIFICATION GATE** (CRITICAL - see below)
+#
+# 3. REVIEWER PHASE:
+#    - Review findings captured to decisions.md
+#    - Session logging continues
+#
+# 4. SUMMARIZER PHASE:
+#    - Runs /openspec-flow:deferred to generate deferred items report
+#    - Generates status.md with final metrics
+#    - Generates lessons-learned.md
+#    - Archives to _docs/_archive/{date}-{change_id}/ if complete
+#    - **E2E STATUS GATE** (CRITICAL - see below)
+#
+# ============================================================================
+# CRITICAL: E2E VERIFICATION REQUIREMENT
+# ============================================================================
+#
+# E2E verification is MANDATORY before marking any OpenSpec change as complete.
+#
+# IMPLEMENTER PHASE E2E GATE:
+#   - Implementer MUST ask user to start application (NOT start it themselves)
+#   - Implementer MUST wait for user confirmation
+#   - Implementer MUST use Playwright MCP to verify API endpoints
+#   - Implementer MUST use Playwright MCP to verify frontend UI
+#   - If E2E not completed, status = "Incomplete - Awaiting E2E Verification"
+#
+# SUMMARIZER PHASE E2E GATE:
+#   - Summarizer MUST check if E2E was performed
+#   - If E2E performed: status = "Complete (E2E Verified)"
+#   - If E2E NOT performed: status = "Incomplete (E2E Required)"
+#   - Summarizer CANNOT mark "Complete" without E2E verification
+#
+# WHY THIS MATTERS:
+#   - Build/test success alone does NOT guarantee working functionality
+#   - User must start application to give Claude visibility into actual runtime
+#   - Playwright MCP provides proof that endpoints/UI actually work
+#
+# SEE ALSO:
+#   - .claude/prompts/openspec-flow/implementer.md (E2E verification section)
+#   - .claude/prompts/openspec-flow/summarizer.md (E2E verification gate)
+#   - CLAUDE.md (E2E Verification Checklist)
+#
+# ============================================================================
+#
+# Trigger Phrases (auto-detected throughout all phases):
+#   - "DECISION:" -> decisions.md
+#   - "chose X over Y" -> decisions.md
+#   - "because..." -> rationale capture
+#   - "trade-off:" -> trade-off analysis
+#   - "CRITICAL:" -> priorities.md critical section
+#   - "DEFER:" -> priorities.md deferred section
+#   - "Blocking:" -> priorities.md blocked section
+#
+# Documentation output: _docs/features/{change_id}/
+# Archive location: _docs/_archive/{date}-{change_id}/

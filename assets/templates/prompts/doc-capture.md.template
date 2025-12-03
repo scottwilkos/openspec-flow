@@ -1,0 +1,294 @@
+# Documentation Auto-Capture Instructions
+
+> **CRITICAL**: These instructions apply to ALL OpenSpec-Flow phases.
+> Documentation is captured automatically as work happens.
+> This ensures organizational learning without relying on human memory.
+
+---
+
+## Auto-Capture Overview
+
+The OpenSpec-Flow documentation system automatically captures:
+1. **Decisions** - Architectural choices with rationale
+2. **Implementation Notes** - Session logs, patterns, discoveries
+3. **Priority Changes** - When tasks are deferred or prioritized
+4. **Gotchas** - Issues encountered and how they were resolved
+5. **Patterns** - Reusable code patterns detected during implementation
+
+All documentation is saved to `_docs/features/{change_id}/`.
+
+---
+
+## Decision Detection
+
+### Trigger Phrases
+
+Capture decisions when you see/write any of these:
+- "We should use X" -> Decision
+- "Choosing X over Y" -> Decision with alternatives
+- "We chose X because..." -> Decision with rationale
+- "The better approach is..." -> Decision
+- "I decided to..." -> Decision
+- "Trade-off:" -> Trade-off analysis
+- "Risk:" -> Risk assessment
+- "DECISION:" -> Explicit decision marker
+
+### Decision Format
+
+When logging a decision, use this format in `_docs/features/{change_id}/decisions.md`:
+
+```markdown
+### DECISION: {Clear Title}
+
+**Date**: {YYYY-MM-DD HH:MM}
+**Phase**: {current-phase: planner|implementer|reviewer|summarizer}
+**Auto-Captured**: Yes
+
+**Context**: {Why this decision came up}
+
+**Options Considered**:
+1. {Option A} - {Description}
+2. {Option B} - {Description}
+
+**Decision**: {What was decided}
+
+**Rationale**:
+- {Reason 1}
+- {Reason 2}
+
+**Trade-offs**:
+- **Gains**: {What we get}
+- **Costs**: {What we give up}
+
+**Related Tasks**: {Task IDs from tasks.md}
+**Files Affected**: {Paths to files impacted}
+
+---
+```
+
+---
+
+## Implementation Note Logging
+
+### Session Start
+
+At the START of each work session, log:
+
+```markdown
+### SESSION: {YYYY-MM-DD HH:MM} - {Phase Name}
+
+**Focus**: {What we're working on}
+**Starting Point**: {Current state}
+
+---
+```
+
+### Session End
+
+At the END of each session, update with:
+
+```markdown
+**Files Modified**:
+- `{path}` - {what changed}
+- `{path}` - {what changed}
+
+**Patterns Applied**:
+- {Pattern name}: {Where applied}
+
+**Discoveries**:
+- {Unexpected finding}
+
+**Adjustments**:
+- {Change from original plan}: {Why}
+
+**Duration**: {Time spent}
+
+---
+```
+
+### Trigger Events
+
+Auto-log when:
+- File is created -> Add to "Files Modified"
+- File is edited -> Add to "Files Modified"
+- Error occurs -> Log as discovery
+- Approach changes -> Log as adjustment
+- Pattern recognized -> Log pattern application
+
+---
+
+## Pattern Detection
+
+### Recognized Patterns
+
+Auto-detect and log when these patterns are used:
+{{#each patterns}}
+- {{this}}
+{{/each}}
+
+### Pattern Log Format
+
+```markdown
+## Patterns Used (Auto-Detected)
+
+| Pattern | Where Applied | Why | Example |
+|---------|---------------|-----|---------|
+| {Name} | `{File:Line}` | {Reason} | {Code snippet} |
+```
+
+---
+
+## Priority Change Tracking
+
+### Trigger Phrases
+
+Capture priority changes when:
+- "This is critical because..." -> Add to Critical
+- "CRITICAL:" -> Add to Critical
+- "Deferring {task} to..." -> Move to Deferred
+- "DEFER:" -> Move to Deferred
+- "Prioritizing {task} over..." -> Log priority change
+- "PRIORITY:" -> Log priority change
+- "Blocking issue:" -> Add to Critical/Blocked
+- "Blocker:" -> Add to Blocked
+
+### Priority Change Format
+
+```markdown
+### PRIORITY CHANGE: {YYYY-MM-DD HH:MM}
+
+**Task**: {task_id} - {description}
+**From**: {original priority}
+**To**: {new priority}
+**Reason**: {Why priority changed}
+**Impact**: {What this affects}
+
+---
+```
+
+---
+
+## Gotcha Logging
+
+### Trigger Events
+
+Log gotchas when:
+- An error occurs and is fixed
+- Something doesn't work as expected
+- A workaround is needed
+- Documentation is wrong
+- A dependency behaves unexpectedly
+
+### Gotcha Format
+
+```markdown
+## Gotchas Encountered (Auto-Logged)
+
+### {Number}. {Title}
+
+**When**: {Timestamp}
+**What Happened**: {Description of the issue}
+**Expected**: {What should have happened}
+**Actual**: {What actually happened}
+**Resolution**: {How it was fixed}
+**Prevention**: {How to avoid in future}
+
+---
+```
+
+---
+
+## File Locations
+
+All auto-captured documentation goes to:
+
+```
+_docs/features/{change_id}/
+├── decisions.md          <- Architectural decisions
+├── implementation-notes.md <- Session logs, patterns, discoveries
+├── priorities.md         <- Priority changes and deferrals
+├── status.md            <- Task completion status (auto-generated)
+└── deferred.md          <- Incomplete items (via /openspec-flow:deferred)
+```
+
+---
+
+## Phase-Specific Instructions
+
+### Planner Phase
+
+**Primary Focus**: Decision capture
+- Log all architectural decisions
+- Document technology choices
+- Record trade-off analysis
+- Note risk assessments
+
+### Implementer Phase
+
+**Primary Focus**: Session logging + Pattern detection
+- Start/end session logs
+- Track files modified
+- Detect patterns applied
+- Log gotchas and discoveries
+- Track priority changes
+
+### Reviewer Phase
+
+**Primary Focus**: Decision refinement
+- Log review findings
+- Capture suggested changes
+- Document compliance checks
+
+### Summarizer Phase
+
+**Primary Focus**: Finalization + Archive
+- Run `/openspec-flow:deferred` for deferred report
+- Compile lessons learned
+- Archive to `_docs/_archive/`
+- Generate final status
+
+---
+
+## Initialization Checklist
+
+At the start of any OpenSpec work:
+
+1. [ ] Ensure `_docs/features/{change_id}/` exists
+2. [ ] Initialize `decisions.md` with header
+3. [ ] Initialize `implementation-notes.md` with header
+4. [ ] Initialize `priorities.md` with header
+5. [ ] Log session start in implementation-notes.md
+
+---
+
+## Quick Reference Card
+
+```
+DECISION CAPTURE:
+  "chose X over Y" -> decisions.md
+  "because..." -> rationale in decisions.md
+  "trade-off:" -> trade-offs in decisions.md
+
+SESSION LOGGING:
+  Session start -> log timestamp + focus
+  Session end -> log files + patterns + discoveries
+
+PRIORITY TRACKING:
+  "CRITICAL:" -> priorities.md critical section
+  "DEFER:" -> priorities.md deferred section
+  "Blocking:" -> priorities.md blocked section
+
+PATTERN DETECTION:
+{{#each patterns}}
+  {{this}}
+{{/each}}
+  -> implementation-notes.md patterns table
+
+GOTCHA LOGGING:
+  Error fixed -> implementation-notes.md gotchas section
+  Unexpected behavior -> implementation-notes.md discoveries
+```
+
+---
+
+*This prompt is included in all OpenSpec-Flow phases to ensure consistent documentation capture.*

@@ -1,0 +1,131 @@
+---
+description: Analyze OpenSpec tasks and generate deferred items report with auto-captured context
+allowed-tools:
+  - Read
+  - Write
+  - Glob
+  - Bash
+---
+
+# OpenSpec Deferred Items Analysis
+
+Analyze the tasks.md for an OpenSpec change and generate a comprehensive deferred items report.
+
+## Usage
+
+```
+/openspec-flow:deferred [CHANGE_ID]
+```
+
+If CHANGE_ID is not provided, will attempt to detect from current context.
+
+## What This Command Does
+
+### 1. Parse Tasks
+- Read `openspec-flow/changes/{CHANGE_ID}/tasks.md`
+- Count `[x]` (completed) vs `[ ]` (incomplete) items
+- Group by section hierarchy (e.g., "1. Domain Model", "2. API Endpoints")
+- Extract task descriptions and context
+
+### 2. Categorize Deferred Items
+
+**Not Started**: `[ ]` items with no sub-items completed
+**Partially Completed**: Parent items with some `[x]` and some `[ ]` children
+**Blocked**: Items with "blocked", "waiting", "depends on" in description
+
+### 3. Estimate Effort
+- Simple task (single line, < 20 chars): 30 min
+- Medium task (API endpoint, component): 1-2 hours
+- Complex task (service, integration): 2-4 hours
+- Large task (workflow, system): 4-8 hours
+
+### 4. Infer Priority
+- **Critical**: Blocks other tasks, security-related, data integrity
+- **High**: Core functionality, user-facing, frequently used
+- **Medium**: Nice-to-have, optimization, polish
+- **Low**: Documentation, future enhancement, edge cases
+
+### 5. Generate Report
+
+Create `_docs/features/{CHANGE_ID}/deferred.md` with:
+- Summary statistics
+- Items grouped by category
+- Priority recommendations
+- Effort estimates
+- Next steps
+
+## Output Format
+
+```
+Generated deferred items report
+
+Summary: {CHANGE_ID}
+   Total: X | Completed: Y (Z%) | Deferred: W (V%)
+
+Saved to: _docs/features/{CHANGE_ID}/deferred.md
+
+Highest Priority Deferred:
+   1. {Task} - {Why important}
+   2. {Task} - {Why important}
+
+By Category:
+   * Not Started: X items
+   * Partially Done: Y items
+   * Blocked: Z items
+
+Estimated Effort: X-Y hours to complete all deferred
+```
+
+## Implementation Instructions
+
+When this command is invoked:
+
+1. **Determine CHANGE_ID**
+   - Use provided argument if given
+   - Otherwise, look for active openspec context
+   - Fail with helpful message if not determinable
+
+2. **Read and Parse tasks.md**
+   ```
+   Read: openspec-flow/changes/{CHANGE_ID}/tasks.md
+
+   Parse checkbox format:
+   - [x] = completed
+   - [ ] = incomplete
+
+   Track section hierarchy from markdown headers
+   ```
+
+3. **Initialize _docs folder**
+   ```
+   mkdir -p _docs/features/{CHANGE_ID}/
+   ```
+
+4. **Analyze and Generate**
+   - Count completion stats
+   - Categorize each deferred item
+   - Estimate effort using heuristics
+   - Determine priority based on:
+     - Task description keywords
+     - Section importance (Domain > API > Frontend > Docs)
+     - Dependency relationships
+
+5. **Write deferred.md**
+   Use template from `.claude/templates/openspec-flow/deferred.md`
+
+6. **Display Summary**
+   Show key stats and recommendations in chat
+
+## Related Commands
+
+- `/openspec:proposal` - Create new OpenSpec change
+- `/openspec:apply` - Implement OpenSpec change
+- `/openspec:archive` - Archive completed change
+
+## Auto-Integration
+
+This command integrates with the OpenSpec-Flow documentation system:
+- Results are saved to `_docs/features/{CHANGE_ID}/`
+- Links to `decisions.md` for context on why items were deferred
+- Links to `priorities.md` for priority change history
+- Archive includes deferred.md when feature completes
