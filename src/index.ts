@@ -27,7 +27,7 @@ const getDescription = (): string => {
 program
   .name('openspec-flow')
   .description(getDescription())
-  .version('0.1.3-alpha');
+  .version('0.1.4-alpha');
 
 program
   .command('init')

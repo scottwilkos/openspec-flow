@@ -1,6 +1,6 @@
 # OpenSpec-Flow
 
-[![Version](https://img.shields.io/badge/version-0.1.3--alpha-blue.svg)](https://github.com/scottwilkos/openspec-flow)
+[![Version](https://img.shields.io/badge/version-0.1.4--alpha-blue.svg)](https://github.com/scottwilkos/openspec-flow)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 

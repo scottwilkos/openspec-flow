@@ -32,7 +32,7 @@ jobs:
       - name: Publish to npm
         run: |
           if [[ "${{ github.ref_name }}" == *"-alpha"* ]] || [[ "${{ github.ref_name }}" == *"-beta"* ]]; then
-            npm publish --provenance --access public --tag next
+            npm publish --access public --tag next
           else
-            npm publish --provenance --access public
+            npm publish --access public
           fi
