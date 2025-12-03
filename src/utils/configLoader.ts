@@ -52,7 +52,7 @@ export function loadConfig(basePath?: string, forceReload = false): OpenSpecFlow
   // Check if config directory exists
   if (!existsSync(configDir)) {
     console.warn(`Config directory not found: ${configDir}`);
-    console.warn('Run "npm run openspec-flow:init" to initialize configuration.');
+    console.warn('Run "openspec-flow init" to initialize configuration.');
     return DEFAULT_CONFIG as OpenSpecFlowConfig;
   }
 

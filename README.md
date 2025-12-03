@@ -1,204 +1,111 @@
 # OpenSpec-Flow
 
-[![Version](https://img.shields.io/badge/version-0.1.4--alpha-blue.svg)](https://github.com/scottwilkos/openspec-flow)
+[![Version](https://img.shields.io/badge/version-0.2.0--alpha-blue.svg)](https://github.com/scottwilkos/openspec-flow)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org)
 
-> **Alpha Software**: This project is in early development. APIs may change between versions.
+> **Alpha Software**: APIs may change between versions.
 
-CLI tool that bridges [OpenSpec](https://openspec.dev/) change management with [Claude-Flow](https://github.com/ruvnet/claude-flow) multi-agent automation for AI-powered development workflows.
-
-## Overview
-
-OpenSpec-Flow automates the implementation of specification-driven changes by:
-
-- Reading OpenSpec proposals, tasks, and specifications
-- Generating comprehensive work briefs with project context
-- Orchestrating implementation via Claude-Flow swarm-based agents
-- Producing detailed flow logs with audit trails
+Bridges [OpenSpec](https://openspec.dev/) (specification-driven change management) with Claude Flow (multi-agent orchestration) via Claude Code. Provides MCP tools and slash commands for automated implementation workflows.
 
 ## Installation
 
 ```bash
-# Via npm (when published)
 npm install -g openspec-flow
-
-# Or from source
-git clone https://github.com/scottwilkos/openspec-flow.git
-cd openspec-flow
-npm install
-npm run build
-npm link
+openspec-flow setup
 ```
 
-## Quick Start
-
+For project-local installation:
 ```bash
-# Initialize configuration for your project
-openspec-flow init
-
-# List all OpenSpec changes
-openspec-flow list
-
-# Generate work brief for a change
-openspec-flow work <CHANGE_ID>
-
-# Run full implementation flow
-openspec-flow implement <CHANGE_ID>
+npm install -D openspec-flow
+npx openspec-flow setup
 ```
+
+## What It Does
+
+The `setup` command:
+1. Installs slash commands to `.claude/commands/`
+2. Configures the MCP server in `.claude/mcp.json`
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `init` | Initialize openspec-flow configuration for the current project |
-| `list` | List all OpenSpec changes with status and task progress |
-| `work <id>` | Generate a work brief for the specified change |
-| `implement <id>` | Execute the full Claude-Flow implementation flow |
-| `batch <ids...>` | Execute multiple changes with hive orchestration |
-| `verify <id>` | Run E2E testing and documentation verification |
-| `deferred <id>` | Analyze tasks and generate deferred items report |
+| `/list-specs` | List all OpenSpec changes with status |
+| `/work <id>` | Generate work brief for a change |
+| `/implement <id>` | Implement the change |
+| `/verify <id>` | Verify implementation |
+| `/review <id>` | Review against requirements |
+| `/deferred <id>` | Analyze incomplete tasks |
+| `/log <id>` | Create implementation flow log |
+| `/osf-help` | Help and command reference |
 
-### Command Details
+## Workflow
 
-#### `openspec-flow init`
-
-Initializes configuration by detecting your project's tech stack and creating config files in `.openspec-flow/config/`.
-
-```bash
-openspec-flow init
-openspec-flow init --name "My Project" --description "Project description"
-openspec-flow init --force  # Overwrite existing config
+```
+1. /list-specs           List available changes
+2. /work CHANGE-001      Generate work brief
+3. /implement CHANGE-001 Implement the tasks
+4. /verify CHANGE-001    Verify build passes
+5. /deferred CHANGE-001  Check incomplete items
+6. /log CHANGE-001       Document implementation
 ```
 
-#### `openspec-flow list`
+## MCP Tools
 
-Displays all changes from `openspec/changes/` with:
-- Change ID
-- Title (from proposal.md)
-- Status (TODO / IN PROGRESS / DONE)
-- Task completion (X/Y completed)
+The MCP server exposes these tools:
 
-#### `openspec-flow work <CHANGE_ID>`
+| Tool | Description |
+|------|-------------|
+| `list_changes` | List all OpenSpec changes |
+| `generate_work_brief` | Create work brief for a change |
+| `get_change_context` | Get full context (proposal, tasks, config) |
+| `analyze_deferred` | Analyze incomplete tasks |
+| `create_flow_log` | Create implementation log |
 
-Generates a work brief at `openspec/changes/<CHANGE_ID>/work-brief.md` containing:
-- Change summary from proposal
-- Task checklist
-- Impacted specifications
-- Architecture context
-- Tech stack references
-- Project constraints
+## OpenSpec Structure
 
-#### `openspec-flow implement <CHANGE_ID>`
+OpenSpec-Flow reads from the standard OpenSpec directory structure:
 
-Executes the full implementation flow:
-1. Generates work brief
-2. Initializes Claude-Flow swarm
-3. Runs multi-phase flow (plan, implement, review, verify)
-4. Produces flow log at `openspec/changes/<CHANGE_ID>/flow-log.md`
-
-#### `openspec-flow batch <CHANGE_IDS...>`
-
-Executes multiple changes with dependency resolution and parallel agent spawning:
-
-```bash
-openspec-flow batch CHANGE-001 CHANGE-002 CHANGE-003
+```
+openspec/
+└── changes/
+    └── <CHANGE-ID>/
+        ├── proposal.md     # Change proposal
+        ├── tasks.md        # Implementation checklist
+        ├── design.md       # Optional design docs
+        ├── work-brief.md   # Generated by /work
+        └── flow-log.md     # Generated by /log
 ```
 
-Features:
-- Automatic dependency graph resolution
-- Parallel execution of independent changes
-- Hierarchical swarm coordination
+## Configuration (Optional)
 
-## Configuration
-
-Configuration is stored in `.openspec-flow/config/` with split YAML files:
+Project configuration in `.openspec-flow/config/`:
 
 ```
 .openspec-flow/config/
-├── project.yaml      # Project name, build/test/run commands
-├── tech-stack.yaml   # Runtime, database, messaging, storage
-├── paths.yaml        # Solution paths, source directories
+├── project.yaml      # Project name, build/test commands
+├── tech-stack.yaml   # Runtime, database, etc.
+├── paths.yaml        # Source directories
 ├── patterns.yaml     # Architecture patterns
 └── constraints.yaml  # Project constraints
 ```
 
-## Integration
-
-### OpenSpec
-
-Reads from standard OpenSpec directory structure:
-
-```
-openspec/
-├── changes/
-│   └── <CHANGE_ID>/
-│       ├── proposal.md
-│       ├── tasks.md
-│       └── design.md (optional)
-└── specs/
-    └── <CAPABILITY>/
-        └── spec.md
-```
-
-Learn more at [openspec.dev](https://openspec.dev/).
-
-### Claude-Flow
-
-Uses Claude-Flow for multi-agent orchestration via MCP (Model Context Protocol). Supports:
-- Swarm topologies: hierarchical, mesh, ring, star
-- Agent types: task-orchestrator, coder, tester, reviewer, system-architect
-- YAML-based flow definitions with phases and dependencies
-
-Learn more at [github.com/ruvnet/claude-flow](https://github.com/ruvnet/claude-flow).
-
-## Project Structure
-
-```
-openspec-flow/
-├── src/
-│   ├── commands/          # CLI command implementations
-│   ├── utils/             # Core utilities
-│   │   ├── openspec.ts        # OpenSpec file readers
-│   │   ├── workbriefGenerator.ts
-│   │   ├── flowExecutor.ts    # YAML flow execution
-│   │   ├── swarmCoordinator.ts
-│   │   ├── mcpBridge.ts       # Claude-Flow MCP interface
-│   │   └── configLoader.ts
-│   ├── types.ts           # TypeScript interfaces
-│   └── index.ts           # CLI entry point
-├── assets/templates/      # Command, prompt, and flow templates
-├── package.json
-└── tsconfig.json
-```
-
-## Development
+## Uninstall
 
 ```bash
-# Build
-npm run build
-
-# Type check
-npm run typecheck
-
-# Watch mode
-npm run dev
-
-# Clean
-npm run clean
+openspec-flow uninstall
 ```
 
 ## Requirements
 
 - Node.js >= 18.0.0
-- [OpenSpec](https://openspec.dev/) (optional peer dependency)
-- [Claude-Flow](https://github.com/ruvnet/claude-flow) MCP server (for implementation flows)
+- Claude Code
 
 ## License
 
 [MIT](LICENSE) - Scott Wilkos
 
-## Related Projects
+## Related
 
 - [OpenSpec](https://openspec.dev/) - Specification-driven change management
-- [Claude-Flow](https://github.com/ruvnet/claude-flow) - Multi-agent orchestration framework
+- [Claude Code](https://claude.ai/code) - AI-powered development

@@ -1,70 +1,70 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with this repository.
 
-## Build and Development Commands
+## Build Commands
 
 ```bash
-npm run build          # Compile TypeScript to dist/
-npm run typecheck      # Type check without emitting
-npm run dev            # Watch mode compilation
-npm run clean          # Remove dist/
+npm run build      # Compile TypeScript to dist/
+npm run typecheck  # Type check without emitting
+npm run dev        # Watch mode compilation
+npm run clean      # Remove dist/
 ```
 
-## Architecture Overview
+## Architecture
 
-OpenSpec-Flow is a CLI tool that bridges OpenSpec change management with Claude-Flow multi-agent automation. It reads OpenSpec proposals/tasks, generates work briefs, and orchestrates implementation via swarm-based agent execution.
+OpenSpec-Flow bridges OpenSpec (specification-driven change management) with Claude Flow (multi-agent orchestration) via Claude Code. It provides:
+1. MCP server with tools for change operations
+2. Slash commands for user interaction
+3. Setup/uninstall commands for installation
 
-### Core Flow
+### Structure
 
-1. **OpenSpec Reading** (`src/utils/openspec.ts`) - Reads from `openspec/changes/<CHANGE_ID>/` structure (proposal.md, tasks.md, design.md)
-2. **Work Brief Generation** (`src/utils/workbriefGenerator.ts`) - Creates implementation context documents
-3. **Flow Execution** (`src/utils/flowExecutor.ts`) - Executes YAML flow definitions with multi-phase orchestration
-4. **Swarm Coordination** (`src/utils/swarmCoordinator.ts`) - Manages parallel agent execution via MCP bridge
+```
+openspec-flow/
+├── src/
+│   ├── index.ts           # Entry point (MCP server + CLI)
+│   ├── setup.ts           # Setup/uninstall logic
+│   ├── mcp/server.ts      # MCP server implementation
+│   ├── types.ts           # TypeScript interfaces
+│   └── utils/
+│       ├── openspec.ts        # OpenSpec file readers
+│       ├── workbriefGenerator.ts
+│       ├── configLoader.ts
+│       └── configSchema.ts
+├── commands/              # Slash command files
+├── dist/                  # Compiled output
+└── package.json
+```
 
-### Key Abstractions
+### Entry Points
 
-- **FlowDefinition** - YAML-based workflow with phases, inputs, outputs, and dependencies
-- **ExecutionPlan** - Dependency-resolved execution order with parallel batches
-- **SwarmState** - Multi-agent coordination state (hierarchical/mesh/ring/star topologies)
-- **MCP Bridge** (`src/utils/mcpBridge.ts`) - Interface to Claude-Flow MCP server for agent spawning and task orchestration
+- `openspec-flow` (default) - Starts MCP server
+- `openspec-flow setup` - Installs to .claude/
+- `openspec-flow setup -g` - Installs to ~/.claude/
+- `openspec-flow uninstall` - Removes installation
 
-### Configuration System
+### MCP Tools
 
-Configuration lives in `.openspec-flow/config/` with split YAML files:
-- `project.yaml` - Project name, build/test/run commands
-- `tech-stack.yaml` - Runtime, database, messaging, storage
-- `paths.yaml` - Solution paths, source directories
-- `patterns.yaml` - Architecture patterns
-- `constraints.yaml` - Project constraints
+| Tool | Description |
+|------|-------------|
+| `list_changes` | List all OpenSpec changes |
+| `generate_work_brief` | Create work brief |
+| `get_change_context` | Get full context |
+| `analyze_deferred` | Analyze incomplete tasks |
+| `create_flow_log` | Create implementation log |
 
-Loaded via `src/utils/configLoader.ts` with caching and computed values.
+### Slash Commands
 
-### Template System
-
-Templates in `assets/templates/` use `{{ variable }}` interpolation:
-- `commands/` - Slash command templates
-- `prompts/` - System prompts for flow phases (planner, implementer, reviewer, verifier, summarizer)
-- `flows/` - Flow definition templates
-
-### CLI Commands
-
-| Command | Description |
-|---------|-------------|
-| `init` | Initialize configuration for a project |
-| `list` | List all OpenSpec changes |
-| `work <id>` | Generate work brief |
-| `implement <id>` | Execute implementation flow |
-| `batch <ids...>` | Execute multiple changes with hive orchestration |
-| `verify <id>` | Run E2E testing and documentation check |
-| `deferred <id>` | Generate deferred items report |
-
-### Type System
-
-Core types in `src/types.ts`:
-- Change types: `OpenSpecChange`, `ChangeListItem`, `TaskItem`
-- Execution types: `ExecutionPlan`, `ExecutionNode`, `ChangeExecutionStatus`
-- Swarm types: `SwarmState`, `SwarmAgent`, `BatchExecutionResult`
+Commands in `commands/` are copied to `.claude/commands/` during setup:
+- `list-specs.md`
+- `work.md`
+- `implement.md`
+- `verify.md`
+- `review.md`
+- `deferred.md`
+- `log.md`
+- `osf-help.md`
 
 ## ESM Module Format
 
