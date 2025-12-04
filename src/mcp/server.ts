@@ -916,7 +916,7 @@ async function handleRequest(request: MCPRequest): Promise<MCPResponse> {
             capabilities: { tools: {} },
             serverInfo: {
               name: 'openspec-flow',
-              version: '0.2.4-alpha',
+              version: '0.2.5-alpha',
             },
           },
         };
