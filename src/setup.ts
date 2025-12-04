@@ -11,9 +11,13 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, copyFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
+import { execSync } from 'child_process';
+import { detectProjectStack, formatDetectionSummary } from './utils/projectDetector.js';
+import { generateConfig, configExists, getConfigPath } from './utils/configGenerator.js';
+import { clearConfigCache } from './utils/configLoader.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -27,6 +31,84 @@ interface McpConfig {
     args?: string[];
     type?: string;
   }>;
+}
+
+interface DependencyStatus {
+  name: string;
+  status: 'ok' | 'missing' | 'warning';
+  message: string;
+  action?: string;
+}
+
+/**
+ * Check if a command exists in PATH
+ */
+function checkCommandExists(command: string): boolean {
+  try {
+    execSync(`which ${command}`, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check all dependencies and return their status
+ */
+function checkDependencies(isGlobal: boolean): DependencyStatus[] {
+  const results: DependencyStatus[] = [];
+
+  // 1. Check project config (skip for global)
+  if (!isGlobal) {
+    if (configExists(process.cwd())) {
+      results.push({ name: 'Project config', status: 'ok', message: '.openspec-flow/config/ exists' });
+    } else {
+      results.push({
+        name: 'Project config',
+        status: 'missing',
+        message: 'Will auto-detect and generate',
+      });
+    }
+  }
+
+  // 2. Check openspec CLI installed
+  const openspecInstalled = checkCommandExists('openspec');
+  if (openspecInstalled) {
+    results.push({ name: 'OpenSpec CLI', status: 'ok', message: 'openspec command available' });
+  } else {
+    results.push({
+      name: 'OpenSpec CLI',
+      status: 'warning',
+      message: 'Not installed',
+      action: 'npm install -g @fission-ai/openspec@latest',
+    });
+  }
+
+  // 3. Check openspec directory
+  if (existsSync('openspec/changes')) {
+    results.push({ name: 'OpenSpec Dir', status: 'ok', message: 'openspec/changes/ exists' });
+  } else {
+    results.push({
+      name: 'OpenSpec Dir',
+      status: 'warning',
+      message: 'openspec/changes/ not found',
+      action: 'openspec init',
+    });
+  }
+
+  // 4. Check claude-flow MCP
+  if (checkClaudeFlowConfigured()) {
+    results.push({ name: 'Claude-Flow', status: 'ok', message: 'MCP configured' });
+  } else {
+    results.push({
+      name: 'Claude-Flow',
+      status: 'warning',
+      message: 'Not configured (needed for /implement, /verify, /review)',
+      action: 'claude mcp add claude-flow npx claude-flow@alpha mcp start',
+    });
+  }
+
+  return results;
 }
 
 /**
@@ -82,24 +164,41 @@ function checkClaudeFlowConfigured(): boolean {
 /**
  * Run the setup process
  */
-export function runSetup(isGlobal: boolean): void {
+export async function runSetup(isGlobal: boolean): Promise<void> {
   const commandsDir = getCommandsDir(isGlobal);
   const mcpConfigPath = getMcpConfigPath(isGlobal);
   const location = isGlobal ? 'global' : 'project';
 
-  console.log(`\nOpenSpec-Flow Setup`);
-  console.log(`Installing to ${location}...\n`);
+  console.log('\n=== OpenSpec-Flow Setup ===\n');
 
-  // Clean up old installations first
+  // Check dependencies first
+  console.log('Checking dependencies...');
+  const deps = checkDependencies(isGlobal);
+
+  for (const dep of deps) {
+    const icon = dep.status === 'ok' ? '[OK]' : dep.status === 'warning' ? '[WARN]' : '[MISSING]';
+    console.log(`  ${icon} ${dep.name}: ${dep.message}`);
+  }
+  console.log();
+
+  // Run init if needed (project-local only)
+  const needsInit = !isGlobal && deps.some(d => d.name === 'Project config' && d.status === 'missing');
+  if (needsInit) {
+    console.log('Initializing project configuration...\n');
+    await runInit();
+    console.log();
+  }
+
+  // Clean up old installations
   cleanupOldInstallation(isGlobal);
 
   // Create commands directory
   if (!existsSync(commandsDir)) {
     mkdirSync(commandsDir, { recursive: true });
-    console.log(`Created ${commandsDir}`);
   }
 
   // Copy slash commands
+  console.log(`Installing slash commands to ${location}...`);
   const sourceCommandsDir = join(PACKAGE_ROOT, 'commands');
   if (existsSync(sourceCommandsDir)) {
     const commands = readdirSync(sourceCommandsDir).filter(f => f.endsWith('.md'));
@@ -129,40 +228,74 @@ Usage in Claude Code:
   /verify <id>      E2E verification
   /review <id>      Code review against requirements
   /deferred <id>    Analyze incomplete tasks
-
-The MCP server provides these tools automatically:
-  - list_changes, generate_work_brief, get_change_context
-  - scaffold_change, save_change_artifact
-  - analyze_change, split_change
-  - analyze_deferred, create_flow_log
 `);
 
-  // Check for required claude-flow dependency
-  if (!checkClaudeFlowConfigured()) {
-    console.log(`
-REQUIRED: Claude-Flow MCP
+  // Show warnings with fix commands
+  const warnings = deps.filter(d => d.status === 'warning' && d.action);
+  if (warnings.length > 0) {
+    console.log('Optional dependencies:');
+    for (const w of warnings) {
+      console.log(`  ${w.name}: ${w.message}`);
+      console.log(`    Fix: ${w.action}`);
+    }
+    console.log();
+  }
+}
 
-The /implement, /verify, and /review commands require Claude-Flow for
-multi-agent orchestration. Install it with:
+/**
+ * Initialize project configuration by detecting tech stack
+ */
+async function runInit(): Promise<void> {
+  const basePath = process.cwd();
 
-  claude mcp add claude-flow -- npx claude-flow@alpha mcp start
+  // Auto-detect project stack
+  console.log('Detecting project stack...');
+  const detection = await detectProjectStack(basePath);
 
-Or add to your .mcp.json (project) or ~/.claude.json (global):
+  if (detection.runtime.type === 'unknown') {
+    console.log('  Could not auto-detect project type.');
+    console.log('  Using generic configuration.\n');
+  } else {
+    console.log('-'.repeat(40));
+    console.log(formatDetectionSummary(detection));
+    console.log('-'.repeat(40));
+  }
 
-  {
-    "mcpServers": {
-      "claude-flow": {
-        "command": "npx",
-        "args": ["claude-flow@alpha", "mcp", "start"]
+  // Get project name
+  const projectName = inferProjectName(basePath);
+  console.log(`\nProject name: ${projectName}\n`);
+
+  // Generate config files
+  console.log('Generating configuration files...');
+  const createdFiles = generateConfig(basePath, detection, {
+    projectName,
+  });
+
+  for (const file of createdFiles) {
+    const relativePath = file.replace(basePath + '/', '');
+    console.log(`  Created: ${relativePath}`);
+  }
+
+  // Clear config cache so it reloads with new config
+  clearConfigCache();
+}
+
+/**
+ * Infer project name from package.json or directory name
+ */
+function inferProjectName(basePath: string): string {
+  const packageJsonPath = join(basePath, 'package.json');
+  if (existsSync(packageJsonPath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+      if (pkg.name) {
+        return pkg.name;
       }
+    } catch {
+      // Ignore
     }
   }
-
-Without claude-flow, only /list-specs, /work, /deferred, and /log will work.
-`);
-  } else {
-    console.log(`Claude-Flow detected - full orchestration available.`);
-  }
+  return basename(basePath) || 'myproject';
 }
 
 /**
