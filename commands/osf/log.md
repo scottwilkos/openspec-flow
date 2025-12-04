@@ -1,4 +1,5 @@
 ---
+# openspec-flow-command: v0.2.4
 description: Create implementation flow log for an OpenSpec change
 argument-hint: "<change-id>"
 allowed-tools: mcp__openspec-flow__*, Bash
@@ -40,4 +41,4 @@ The log documents:
 
 - Review log for accuracy
 - Create git commit
-- Archive the change if complete
+- `/osf:archive $ARGUMENTS` if complete

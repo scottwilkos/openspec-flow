@@ -28,6 +28,11 @@ switch (command) {
     runUninstall(uninstallGlobal);
     break;
 
+  case '--version':
+  case '-V':
+    console.log('0.2.4-alpha');
+    break;
+
   case '--help':
   case '-h':
     console.log(`
@@ -55,6 +60,7 @@ After setup, use slash commands in Claude Code:
   /verify <id>      E2E verification via claude-flow
   /review <id>      Code review via claude-flow
   /deferred <id>    Analyze incomplete tasks
+  /archive <id>     Archive completed/closed change
 `);
     break;
 

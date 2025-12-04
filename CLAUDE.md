@@ -50,21 +50,30 @@ openspec-flow/
 |------|-------------|
 | `list_changes` | List all OpenSpec changes |
 | `generate_work_brief` | Create work brief |
-| `get_change_context` | Get full context |
+| `get_change_context` | Get full context (paths + summary) |
+| `scaffold_change` | Create new change directory |
+| `save_change_artifact` | Save proposal/tasks/design/spec files |
+| `analyze_change` | Analyze size and complexity |
+| `split_change` | Split into phased sub-changes |
 | `analyze_deferred` | Analyze incomplete tasks |
 | `create_flow_log` | Create implementation log |
+| `archive_change` | Archive completed/closed change |
 
 ### Slash Commands
 
 Commands in `commands/` are copied to `.claude/commands/` during setup:
-- `list-specs.md`
-- `work.md`
-- `implement.md`
-- `verify.md`
-- `review.md`
-- `deferred.md`
-- `log.md`
-- `osf-help.md`
+- `ideate.md` - Create change from requirements
+- `list-specs.md` - List changes
+- `work.md` - Generate work brief
+- `analyze.md` - Analyze complexity
+- `split.md` - Split large changes
+- `implement.md` - Multi-agent implementation
+- `verify.md` - Multi-agent verification
+- `review.md` - Multi-agent review
+- `deferred.md` - Analyze incomplete tasks
+- `log.md` - Create flow log
+- `archive.md` - Archive completed change
+- `osf-help.md` - Help reference
 
 ## ESM Module Format
 

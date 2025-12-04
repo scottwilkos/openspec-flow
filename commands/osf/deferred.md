@@ -1,4 +1,5 @@
 ---
+# openspec-flow-command: v0.2.4
 description: Analyze incomplete tasks for an OpenSpec change
 argument-hint: "<change-id>"
 allowed-tools: mcp__openspec-flow__analyze_deferred
@@ -26,4 +27,4 @@ Categorize deferred items by:
 Offer next steps:
 - Create follow-up changes for critical items
 - Re-prioritize remaining tasks
-- Archive with documented deferrals
+- `/osf:archive $ARGUMENTS` with documented deferrals

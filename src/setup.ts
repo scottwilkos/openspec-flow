@@ -7,16 +7,16 @@
  * - User-scoped: ~/.claude.json
  *
  * Commands Location:
- * - .claude/commands/ (both project and global)
+ * - .claude/commands/osf/ (namespaced under osf:)
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, copyFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, copyFileSync, statSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { detectProjectStack, formatDetectionSummary } from './utils/projectDetector.js';
-import { generateConfig, configExists, getConfigPath } from './utils/configGenerator.js';
+import { generateConfig, configExists } from './utils/configGenerator.js';
 import { clearConfigCache } from './utils/configLoader.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -24,6 +24,9 @@ const __dirname = dirname(__filename);
 
 // Package root is one level up from dist/
 const PACKAGE_ROOT = join(__dirname, '..');
+
+// Marker to identify our commands
+const OSF_MARKER = '# openspec-flow-command:';
 
 interface McpConfig {
   mcpServers?: Record<string, {
@@ -40,6 +43,12 @@ interface DependencyStatus {
   action?: string;
 }
 
+interface InstallCheckResult {
+  canInstall: boolean;
+  conflicts: string[];
+  existing: string[];
+}
+
 /**
  * Check if a command exists in PATH
  */
@@ -50,6 +59,53 @@ function checkCommandExists(command: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Check if a file is an openspec-flow command by looking for our marker
+ */
+function isOurCommand(filePath: string): boolean {
+  if (!existsSync(filePath)) {
+    return false;
+  }
+  try {
+    const content = readFileSync(filePath, 'utf-8');
+    return content.includes(OSF_MARKER);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if we can safely install commands
+ * Returns conflicts (files that exist but aren't ours)
+ */
+function checkCanInstall(commandsDir: string): InstallCheckResult {
+  const osfDir = join(commandsDir, 'osf');
+  const conflicts: string[] = [];
+  const existing: string[] = [];
+
+  // Check if osf directory exists
+  if (!existsSync(osfDir)) {
+    return { canInstall: true, conflicts: [], existing: [] };
+  }
+
+  // Check each file in the osf directory
+  const files = readdirSync(osfDir).filter(f => f.endsWith('.md'));
+  for (const file of files) {
+    const filePath = join(osfDir, file);
+    if (isOurCommand(filePath)) {
+      existing.push(file);
+    } else {
+      conflicts.push(file);
+    }
+  }
+
+  return {
+    canInstall: conflicts.length === 0,
+    conflicts,
+    existing,
+  };
 }
 
 /**
@@ -80,7 +136,7 @@ function checkDependencies(isGlobal: boolean): DependencyStatus[] {
       name: 'OpenSpec CLI',
       status: 'warning',
       message: 'Not installed',
-      action: 'npm install -g @fission-ai/openspec@latest',
+      action: 'npm install -g @anthropic/openspec',
     });
   }
 
@@ -103,7 +159,7 @@ function checkDependencies(isGlobal: boolean): DependencyStatus[] {
     results.push({
       name: 'Claude-Flow',
       status: 'warning',
-      message: 'Not configured (needed for /implement, /verify, /review)',
+      message: 'Not configured (needed for /osf:implement, /osf:verify, /osf:review)',
       action: 'claude mcp add claude-flow npx claude-flow@alpha mcp start',
     });
   }
@@ -171,7 +227,23 @@ export async function runSetup(isGlobal: boolean): Promise<void> {
 
   console.log('\n=== OpenSpec-Flow Setup ===\n');
 
-  // Check dependencies first
+  // Check for conflicts first
+  const installCheck = checkCanInstall(commandsDir);
+  if (!installCheck.canInstall) {
+    console.error('ERROR: Cannot install - conflicting files found in .claude/commands/osf/:\n');
+    for (const conflict of installCheck.conflicts) {
+      console.error(`  - ${conflict} (not an openspec-flow command)`);
+    }
+    console.error('\nThese files do not have the openspec-flow marker and may be custom commands.');
+    console.error('Please remove or rename them before running setup.\n');
+    process.exit(1);
+  }
+
+  if (installCheck.existing.length > 0) {
+    console.log(`Updating ${installCheck.existing.length} existing openspec-flow commands...`);
+  }
+
+  // Check dependencies
   console.log('Checking dependencies...');
   const deps = checkDependencies(isGlobal);
 
@@ -189,27 +261,28 @@ export async function runSetup(isGlobal: boolean): Promise<void> {
     console.log();
   }
 
-  // Clean up old installations
+  // Clean up old installations (pre-0.2.4 flat commands)
   cleanupOldInstallation(isGlobal);
 
-  // Create commands directory
-  if (!existsSync(commandsDir)) {
-    mkdirSync(commandsDir, { recursive: true });
+  // Create commands/osf directory
+  const osfDir = join(commandsDir, 'osf');
+  if (!existsSync(osfDir)) {
+    mkdirSync(osfDir, { recursive: true });
   }
 
-  // Copy slash commands
+  // Copy slash commands from osf/ subdirectory
   console.log(`Installing slash commands to ${location}...`);
-  const sourceCommandsDir = join(PACKAGE_ROOT, 'commands');
-  if (existsSync(sourceCommandsDir)) {
-    const commands = readdirSync(sourceCommandsDir).filter(f => f.endsWith('.md'));
+  const sourceOsfDir = join(PACKAGE_ROOT, 'commands', 'osf');
+  if (existsSync(sourceOsfDir)) {
+    const commands = readdirSync(sourceOsfDir).filter(f => f.endsWith('.md'));
     for (const cmd of commands) {
-      const src = join(sourceCommandsDir, cmd);
-      const dest = join(commandsDir, cmd);
+      const src = join(sourceOsfDir, cmd);
+      const dest = join(osfDir, cmd);
       copyFileSync(src, dest);
-      console.log(`  Installed /${cmd.replace('.md', '')}`);
+      console.log(`  Installed /osf:${cmd.replace('.md', '')}`);
     }
   } else {
-    console.error(`Warning: Commands directory not found at ${sourceCommandsDir}`);
+    console.error(`Warning: Commands directory not found at ${sourceOsfDir}`);
   }
 
   // Configure MCP server
@@ -219,15 +292,17 @@ export async function runSetup(isGlobal: boolean): Promise<void> {
 Setup complete!
 
 Usage in Claude Code:
-  /ideate <req>     Create new change from requirements
-  /list-specs       List all OpenSpec changes
-  /work <id>        Generate work brief for a change
-  /analyze <id>     Analyze change size/complexity
-  /split <id>       Split large change into phases
-  /implement <id>   Run multi-agent implementation
-  /verify <id>      E2E verification
-  /review <id>      Code review against requirements
-  /deferred <id>    Analyze incomplete tasks
+  /osf:ideate <req>     Create new change from requirements
+  /osf:list             List all OpenSpec changes
+  /osf:work <id>        Generate work brief for a change
+  /osf:analyze <id>     Analyze change size/complexity
+  /osf:split <id>       Split large change into phases
+  /osf:implement <id>   Run multi-agent implementation
+  /osf:verify <id>      E2E verification
+  /osf:review <id>      Code review against requirements
+  /osf:deferred <id>    Analyze incomplete tasks
+  /osf:archive <id>     Archive completed/closed change
+  /osf:help             Command reference
 `);
 
   // Show warnings with fix commands
@@ -329,22 +404,37 @@ function configureMcp(mcpConfigPath: string): void {
 }
 
 /**
- * Clean up old installations (pre-0.2.0)
+ * Clean up old installations (pre-0.2.4 flat commands)
  */
 function cleanupOldInstallation(isGlobal: boolean): void {
   const dotClaudeDir = isGlobal
     ? join(homedir(), '.claude')
     : join(process.cwd(), '.claude');
 
-  // Remove old namespaced commands directory
-  const oldNamespacedDir = join(dotClaudeDir, 'commands', 'openspec-flow');
+  const commandsDir = join(dotClaudeDir, 'commands');
+
+  // Remove old namespaced commands directory (pre-0.2.0)
+  const oldNamespacedDir = join(commandsDir, 'openspec-flow');
   if (existsSync(oldNamespacedDir)) {
     rmSync(oldNamespacedDir, { recursive: true });
     console.log(`Removed old namespaced commands: ${oldNamespacedDir}`);
   }
 
-  // Remove old individual commands that may have been installed
-  const oldCommands = [
+  // Remove old flat commands (0.2.0 - 0.2.3) - only if they are ours
+  const oldFlatCommands = [
+    'list-specs.md',
+    'work.md',
+    'implement.md',
+    'verify.md',
+    'review.md',
+    'deferred.md',
+    'log.md',
+    'osf-help.md',
+    'ideate.md',
+    'analyze.md',
+    'split.md',
+    'archive.md',
+    // Even older formats
     'openspec-flow:list.md',
     'openspec-flow:work.md',
     'openspec-flow:implement.md',
@@ -355,13 +445,22 @@ function cleanupOldInstallation(isGlobal: boolean): void {
     'openspec-flow:help.md',
   ];
 
-  const commandsDir = join(dotClaudeDir, 'commands');
   if (existsSync(commandsDir)) {
-    for (const cmd of oldCommands) {
+    for (const cmd of oldFlatCommands) {
       const cmdPath = join(commandsDir, cmd);
       if (existsSync(cmdPath)) {
-        rmSync(cmdPath);
-        console.log(`Removed old command: ${cmd}`);
+        // Only remove if it's our command or doesn't have content (empty)
+        if (isOurCommand(cmdPath) || readFileSync(cmdPath, 'utf-8').trim() === '') {
+          rmSync(cmdPath);
+          console.log(`Removed old command: ${cmd}`);
+        } else {
+          // Check if it looks like our old command (has openspec-flow MCP tools)
+          const content = readFileSync(cmdPath, 'utf-8');
+          if (content.includes('mcp__openspec-flow__') || content.includes('OpenSpec-Flow')) {
+            rmSync(cmdPath);
+            console.log(`Removed old command: ${cmd}`);
+          }
+        }
       }
     }
   }
@@ -398,27 +497,33 @@ export function runUninstall(isGlobal: boolean): void {
   console.log(`\nOpenSpec-Flow Uninstall`);
   console.log(`Removing from ${location}...\n`);
 
-  // Remove slash commands
-  const commandsToRemove = [
-    'list-specs.md',
-    'work.md',
-    'implement.md',
-    'verify.md',
-    'review.md',
-    'deferred.md',
-    'log.md',
-    'osf-help.md',
-    'ideate.md',
-    'analyze.md',
-    'split.md',
-  ];
+  // Remove osf/ directory (only our commands)
+  const osfDir = join(commandsDir, 'osf');
+  if (existsSync(osfDir)) {
+    const files = readdirSync(osfDir).filter(f => f.endsWith('.md'));
+    let removedCount = 0;
+    const skipped: string[] = [];
 
-  if (existsSync(commandsDir)) {
-    for (const cmd of commandsToRemove) {
-      const cmdPath = join(commandsDir, cmd);
-      if (existsSync(cmdPath)) {
-        rmSync(cmdPath);
-        console.log(`  Removed /${cmd.replace('.md', '')}`);
+    for (const file of files) {
+      const filePath = join(osfDir, file);
+      if (isOurCommand(filePath)) {
+        rmSync(filePath);
+        console.log(`  Removed /osf:${file.replace('.md', '')}`);
+        removedCount++;
+      } else {
+        skipped.push(file);
+      }
+    }
+
+    // Remove the osf directory if empty
+    const remaining = readdirSync(osfDir);
+    if (remaining.length === 0) {
+      rmSync(osfDir, { recursive: true });
+      console.log(`  Removed osf/ directory`);
+    } else if (skipped.length > 0) {
+      console.log(`\n  Skipped ${skipped.length} non-openspec-flow files in osf/:`);
+      for (const s of skipped) {
+        console.log(`    - ${s}`);
       }
     }
   }

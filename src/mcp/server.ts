@@ -3,14 +3,15 @@
  * Exposes tools via Model Context Protocol (stdio transport)
  */
 
-import { listChanges, loadChange } from '../utils/openspec.js';
+import { listChanges, loadChange, resolveChangeId } from '../utils/openspec.js';
 import { generateWorkBrief, saveWorkBrief } from '../utils/workbriefGenerator.js';
 import { loadConfig, configExists } from '../utils/configLoader.js';
 import { analyzeChange, slugify } from '../utils/analyzer.js';
 import { splitChange } from '../utils/splitter.js';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
-import { PhaseDefinition } from '../types.js';
+import { execSync } from 'child_process';
+import { PhaseDefinition, ArchiveReason, ArchiveMetadata, ArchiveResult, ChangeIdResolution } from '../types.js';
 
 interface MCPRequest {
   jsonrpc: '2.0';
@@ -30,6 +31,34 @@ interface MCPResponse {
 }
 
 const TOOLS = [
+  {
+    name: 'get_proposal_workflow',
+    description: 'Get the OpenSpec proposal workflow instructions. Reads from .claude/commands/openspec/proposal.md if it exists, providing the canonical workflow for creating OpenSpec changes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        custom_path: {
+          type: 'string',
+          description: 'Optional custom path to the proposal workflow file. Defaults to .claude/commands/openspec/proposal.md',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'resolve_change_id',
+    description: 'Resolve a partial change ID to the full ID. Returns exact match, resolved match, ambiguous matches, or not found with suggestions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        partial_id: {
+          type: 'string',
+          description: 'Full or partial change ID to resolve',
+        },
+      },
+      required: ['partial_id'],
+    },
+  },
   {
     name: 'list_changes',
     description: 'List all OpenSpec changes with their status and task completion',
@@ -201,12 +230,145 @@ const TOOLS = [
       required: ['change_id', 'phases'],
     },
   },
+  {
+    name: 'archive_change',
+    description: 'Archive a completed or closed OpenSpec change using the OpenSpec CLI. Requires openspec CLI to be installed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        change_id: {
+          type: 'string',
+          description: 'The OpenSpec change ID to archive',
+        },
+        reason: {
+          type: 'string',
+          enum: ['completed', 'deferred', 'superseded', 'abandoned'],
+          description: 'Reason for archiving: completed (all done), deferred (some tasks remain), superseded (replaced by another), abandoned (no longer needed)',
+        },
+        skip_specs: {
+          type: 'boolean',
+          description: 'Skip merging spec updates (for tooling-only changes)',
+        },
+        notes: {
+          type: 'string',
+          description: 'Additional notes or context for the archive',
+        },
+      },
+      required: ['change_id', 'reason'],
+    },
+  },
 ];
 
 const OPENSPEC_ROOT = 'openspec';
 const CHANGES_DIR = join(OPENSPEC_ROOT, 'changes');
 
+// Helper type for handlers that return ambiguous results
+interface AmbiguousResponse {
+  status: 'ambiguous';
+  inputId: string;
+  matches: string[];
+  message: string;
+}
+
+/**
+ * Check if a command exists in PATH
+ */
+function checkCommandExists(command: string): boolean {
+  try {
+    execSync(`which ${command}`, { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Helper to handle change ID resolution for handlers.
+ * Returns the resolved ID, or throws for not_found, or returns ambiguous response.
+ */
+function resolveOrThrow(partialId: string): string | AmbiguousResponse {
+  const resolution = resolveChangeId(partialId);
+
+  switch (resolution.status) {
+    case 'exact':
+    case 'resolved':
+      return resolution.changeId!;
+
+    case 'ambiguous':
+      return {
+        status: 'ambiguous',
+        inputId: partialId,
+        matches: resolution.matches!,
+        message: `Multiple changes match "${partialId}". Please specify which one.`,
+      };
+
+    case 'not_found':
+      const msg = `Change not found: ${partialId}`;
+      if (resolution.suggestions && resolution.suggestions.length > 0) {
+        throw new Error(
+          msg + `\n\nSimilar changes:\n` + resolution.suggestions.map((s) => `  - ${s}`).join('\n')
+        );
+      }
+      throw new Error(msg);
+  }
+}
+
 // Tool handlers
+async function handleGetProposalWorkflow(params: { custom_path?: string }): Promise<unknown> {
+  const defaultPaths = [
+    '.claude/commands/openspec/proposal.md',
+    'commands/openspec/proposal.md',
+    '.claude/commands/proposal.md',
+  ];
+
+  const searchPaths = params.custom_path ? [params.custom_path, ...defaultPaths] : defaultPaths;
+
+  for (const path of searchPaths) {
+    if (existsSync(path)) {
+      const content = readFileSync(path, 'utf-8');
+
+      // Extract the workflow content (between OPENSPEC:START and OPENSPEC:END if present)
+      const openspecMatch = content.match(/<!-- OPENSPEC:START -->([\s\S]*?)<!-- OPENSPEC:END -->/);
+      const workflowContent = openspecMatch ? openspecMatch[1].trim() : content;
+
+      return {
+        found: true,
+        path,
+        workflow: workflowContent,
+        instructions: 'Follow these OpenSpec proposal workflow steps. After completing, run `openspec validate <id> --strict` to validate.',
+      };
+    }
+  }
+
+  // No workflow file found - return embedded default workflow
+  return {
+    found: false,
+    searchedPaths: searchPaths,
+    workflow: `**Guardrails**
+- Favor straightforward, minimal implementations first and add complexity only when it is requested or clearly required.
+- Keep changes tightly scoped to the requested outcome.
+- Identify any vague or ambiguous details and ask the necessary follow-up questions before editing files.
+
+**Steps**
+1. Review project context, run \`openspec list\` and \`openspec list --specs\`, and inspect related code or docs to ground the proposal in current behaviour.
+2. Choose a unique verb-led \`change-id\` and scaffold \`proposal.md\`, \`tasks.md\`, and \`design.md\` (when needed) under \`openspec/changes/<id>/\`.
+3. Map the change into concrete capabilities or requirements, breaking multi-scope efforts into distinct spec deltas.
+4. Capture architectural reasoning in \`design.md\` when the solution spans multiple systems or introduces new patterns.
+5. Draft spec deltas in \`changes/<id>/specs/<capability>/spec.md\` using \`## ADDED|MODIFIED|REMOVED Requirements\` with at least one \`#### Scenario:\` per requirement.
+6. Draft \`tasks.md\` as an ordered list of small, verifiable work items.
+7. Validate with \`openspec validate <id> --strict\` and resolve every issue before sharing the proposal.
+
+**Reference**
+- Use \`openspec show <id> --json --deltas-only\` or \`openspec show <spec> --type spec\` to inspect details when validation fails.
+- Search existing requirements with \`rg -n "Requirement:|Scenario:" openspec/specs\` before writing new ones.`,
+    instructions: 'No project-specific workflow found. Using default OpenSpec workflow. After completing, run `openspec validate <id> --strict` to validate.',
+  };
+}
+
+async function handleResolveChangeId(params: { partial_id: string }): Promise<ChangeIdResolution> {
+  return resolveChangeId(params.partial_id);
+}
+
 async function handleListChanges(): Promise<unknown> {
   const changes = listChanges();
   return {
@@ -222,19 +384,27 @@ async function handleListChanges(): Promise<unknown> {
 }
 
 async function handleGenerateWorkBrief(params: { change_id: string }): Promise<unknown> {
-  const change = loadChange(params.change_id);
+  const resolved = resolveOrThrow(params.change_id);
+  if (typeof resolved !== 'string') return resolved; // Ambiguous
+
+  const change = loadChange(resolved);
   const workBriefContent = generateWorkBrief(change);
   const outputPath = saveWorkBrief(change, workBriefContent);
 
   return {
     success: true,
     path: outputPath,
-    changeId: params.change_id,
+    changeId: resolved,
+    resolvedChangeId: resolved,
+    wasResolved: resolved !== params.change_id,
   };
 }
 
 async function handleGetChangeContext(params: { change_id: string }): Promise<unknown> {
-  const change = loadChange(params.change_id);
+  const resolved = resolveOrThrow(params.change_id);
+  if (typeof resolved !== 'string') return resolved; // Ambiguous
+
+  const change = loadChange(resolved);
 
   // Build file paths
   const proposalPath = join(change.path, 'proposal.md');
@@ -258,7 +428,7 @@ async function handleGetChangeContext(params: { change_id: string }): Promise<un
   }
 
   // Extract title from proposal (first H1)
-  let title = params.change_id;
+  let title = resolved;
   if (change.proposal) {
     const titleMatch = change.proposal.match(/^#\s+(.+)$/m);
     if (titleMatch) {
@@ -273,7 +443,9 @@ async function handleGetChangeContext(params: { change_id: string }): Promise<un
   }
 
   return {
-    changeId: params.change_id,
+    changeId: resolved,
+    resolvedChangeId: resolved,
+    wasResolved: resolved !== params.change_id,
     title,
     paths: {
       root: change.path,
@@ -304,10 +476,13 @@ async function handleGetChangeContext(params: { change_id: string }): Promise<un
 }
 
 async function handleAnalyzeDeferred(params: { change_id: string }): Promise<unknown> {
-  const change = loadChange(params.change_id);
+  const resolved = resolveOrThrow(params.change_id);
+  if (typeof resolved !== 'string') return resolved; // Ambiguous
+
+  const change = loadChange(resolved);
 
   if (!change.tasks) {
-    throw new Error(`No tasks.md found for change: ${params.change_id}`);
+    throw new Error(`No tasks.md found for change: ${resolved}`);
   }
 
   const lines = change.tasks.split('\n');
@@ -328,7 +503,9 @@ async function handleAnalyzeDeferred(params: { change_id: string }): Promise<unk
   const incomplete = tasks.filter((t) => !t.completed);
 
   return {
-    changeId: params.change_id,
+    changeId: resolved,
+    resolvedChangeId: resolved,
+    wasResolved: resolved !== params.change_id,
     summary: {
       total: tasks.length,
       completed: completed.length,
@@ -348,14 +525,17 @@ async function handleCreateFlowLog(params: {
   summary?: string;
   files_modified?: string[];
 }): Promise<unknown> {
-  const change = loadChange(params.change_id);
+  const resolved = resolveOrThrow(params.change_id);
+  if (typeof resolved !== 'string') return resolved; // Ambiguous
+
+  const change = loadChange(resolved);
 
   const timestamp = new Date().toISOString();
   const status = params.status || 'complete';
   const summary = params.summary || 'Implementation completed';
   const filesModified = params.files_modified || [];
 
-  const flowLog = `# Flow Log: ${params.change_id}
+  const flowLog = `# Flow Log: ${resolved}
 
 **Generated**: ${timestamp}
 **Status**: ${status.charAt(0).toUpperCase() + status.slice(1)}
@@ -381,7 +561,9 @@ ${filesModified.length > 0 ? filesModified.map((f) => `- ${f}`).join('\n') : '- 
   return {
     success: true,
     path: flowLogPath,
-    changeId: params.change_id,
+    changeId: resolved,
+    resolvedChangeId: resolved,
+    wasResolved: resolved !== params.change_id,
   };
 }
 
@@ -467,10 +649,13 @@ async function handleSaveChangeArtifact(params: {
   content: string;
   spec_path?: string;
 }): Promise<unknown> {
-  const changePath = join(CHANGES_DIR, params.change_id);
+  const resolved = resolveOrThrow(params.change_id);
+  if (typeof resolved !== 'string') return resolved; // Ambiguous
+
+  const changePath = join(CHANGES_DIR, resolved);
 
   if (!existsSync(changePath)) {
-    throw new Error(`Change not found: ${params.change_id}`);
+    throw new Error(`Change not found: ${resolved}`);
   }
 
   let filePath: string;
@@ -489,31 +674,191 @@ async function handleSaveChangeArtifact(params: {
 
   return {
     success: true,
-    changeId: params.change_id,
+    changeId: resolved,
+    resolvedChangeId: resolved,
+    wasResolved: resolved !== params.change_id,
     artifactType: params.artifact_type,
     path: filePath,
   };
 }
 
 async function handleAnalyzeChange(params: { change_id: string }): Promise<unknown> {
-  return analyzeChange(params.change_id);
+  const resolved = resolveOrThrow(params.change_id);
+  if (typeof resolved !== 'string') return resolved; // Ambiguous
+
+  const result = analyzeChange(resolved);
+  return {
+    ...result,
+    resolvedChangeId: resolved,
+    wasResolved: resolved !== params.change_id,
+  };
 }
 
 async function handleSplitChange(params: {
   change_id: string;
   phases: Array<{ description: string; task_indices: number[] }>;
 }): Promise<unknown> {
+  const resolved = resolveOrThrow(params.change_id);
+  if (typeof resolved !== 'string') return resolved; // Ambiguous
+
   // Convert API format to internal format
   const phases: PhaseDefinition[] = params.phases.map((p) => ({
     description: p.description,
     taskIndices: p.task_indices,
   }));
 
-  return splitChange(params.change_id, phases);
+  const result = splitChange(resolved, phases);
+  return {
+    ...result,
+    resolvedChangeId: resolved,
+    wasResolved: resolved !== params.change_id,
+  };
+}
+
+async function handleArchiveChange(params: {
+  change_id: string;
+  reason: ArchiveReason;
+  skip_specs?: boolean;
+  notes?: string;
+}): Promise<(ArchiveResult & { resolvedChangeId: string; wasResolved: boolean }) | AmbiguousResponse> {
+  const resolved = resolveOrThrow(params.change_id);
+  if (typeof resolved !== 'string') return resolved; // Ambiguous
+
+  const { reason, skip_specs, notes } = params;
+
+  // 1. Verify change exists
+  const changePath = join(CHANGES_DIR, resolved);
+  if (!existsSync(changePath)) {
+    throw new Error(`Change not found: ${resolved}`);
+  }
+
+  // 2. Require OpenSpec CLI
+  if (!checkCommandExists('openspec')) {
+    throw new Error(
+      'OpenSpec CLI required for archiving.\n' +
+        'Install: npm install -g @anthropic/openspec'
+    );
+  }
+
+  // 3. Build CLI args and call openspec archive
+  const args = ['archive', resolved, '--yes'];
+  if (skip_specs) {
+    args.push('--skip-specs');
+  }
+
+  try {
+    execSync(`openspec ${args.join(' ')}`, {
+      stdio: 'pipe',
+      cwd: process.cwd(),
+    });
+  } catch (error) {
+    const execError = error as { stderr?: Buffer; message?: string };
+    const stderr = execError.stderr?.toString() || execError.message || String(error);
+    throw new Error(`OpenSpec archive failed: ${stderr}`);
+  }
+
+  // 4. Find the archived path (CLI uses YYYY-MM-DD-{id} format)
+  const archiveDir = join(CHANGES_DIR, 'archive');
+  const datePrefix = new Date().toISOString().slice(0, 10);
+  let archivePath = join(archiveDir, `${datePrefix}-${resolved}`);
+
+  // If exact date match not found, search for any matching archive
+  if (!existsSync(archivePath)) {
+    const entries = existsSync(archiveDir) ? readdirSync(archiveDir) : [];
+    const match = entries.find((e) => e.endsWith(`-${resolved}`));
+    if (match) {
+      archivePath = join(archiveDir, match);
+    }
+  }
+
+  // 5. Load change info for summary (from archived path now)
+  const archivedAt = new Date().toISOString();
+  const tasks: Array<{ description: string; completed: boolean }> = [];
+
+  const archivedTasksPath = join(archivePath, 'tasks.md');
+  if (existsSync(archivedTasksPath)) {
+    const tasksContent = readFileSync(archivedTasksPath, 'utf-8');
+    const lines = tasksContent.split('\n');
+    lines.forEach((line) => {
+      const completedMatch = line.match(/^\s*-\s*\[x\]\s*(.+)/i);
+      const incompleteMatch = line.match(/^\s*-\s*\[\s*\]\s*(.+)/i);
+
+      if (completedMatch) {
+        tasks.push({ description: completedMatch[1], completed: true });
+      } else if (incompleteMatch) {
+        tasks.push({ description: incompleteMatch[1], completed: false });
+      }
+    });
+  }
+
+  const completed = tasks.filter((t) => t.completed);
+  const incomplete = tasks.filter((t) => !t.completed);
+
+  // 6. Create openspec-flow metadata (on top of what CLI created)
+  const metadata: ArchiveMetadata = {
+    archivedAt,
+    reason,
+    originalPath: changePath,
+    archivedBy: 'openspec-flow',
+    summary: {
+      tasksTotal: tasks.length,
+      tasksCompleted: completed.length,
+      deferredCount: incomplete.length,
+    },
+  };
+
+  if (incomplete.length > 0) {
+    metadata.deferredItems = incomplete.map((t) => ({
+      description: t.description,
+    }));
+  }
+
+  if (notes) {
+    metadata.notes = notes;
+  }
+
+  // 7. Write our metadata file as YAML
+  const metadataYaml = `# openspec-flow archive metadata
+archived_at: "${metadata.archivedAt}"
+reason: ${metadata.reason}
+original_path: ${metadata.originalPath}
+archived_by: ${metadata.archivedBy}
+
+summary:
+  tasks_total: ${metadata.summary.tasksTotal}
+  tasks_completed: ${metadata.summary.tasksCompleted}
+  deferred_count: ${metadata.summary.deferredCount}
+${metadata.deferredItems && metadata.deferredItems.length > 0 ? `
+deferred_items:
+${metadata.deferredItems.map((item) => `  - description: "${item.description.replace(/"/g, '\\"')}"`).join('\n')}
+` : ''}${metadata.notes ? `
+notes: |
+  ${metadata.notes.split('\n').join('\n  ')}
+` : ''}`;
+
+  writeFileSync(join(archivePath, 'archive-metadata.yaml'), metadataYaml, 'utf-8');
+
+  // 8. Return result
+  return {
+    success: true,
+    changeId: resolved,
+    resolvedChangeId: resolved,
+    wasResolved: resolved !== params.change_id,
+    originalPath: changePath,
+    archivePath,
+    reason,
+    archivedAt,
+    summary: metadata.summary,
+    metadata,
+  };
 }
 
 function handleToolCall(name: string, args: Record<string, unknown>): Promise<unknown> {
   switch (name) {
+    case 'get_proposal_workflow':
+      return handleGetProposalWorkflow(args as { custom_path?: string });
+    case 'resolve_change_id':
+      return handleResolveChangeId(args as { partial_id: string });
     case 'list_changes':
       return handleListChanges();
     case 'generate_work_brief':
@@ -545,6 +890,13 @@ function handleToolCall(name: string, args: Record<string, unknown>): Promise<un
         change_id: string;
         phases: Array<{ description: string; task_indices: number[] }>;
       });
+    case 'archive_change':
+      return handleArchiveChange(args as {
+        change_id: string;
+        reason: ArchiveReason;
+        skip_specs?: boolean;
+        notes?: string;
+      });
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
@@ -564,7 +916,7 @@ async function handleRequest(request: MCPRequest): Promise<MCPResponse> {
             capabilities: { tools: {} },
             serverInfo: {
               name: 'openspec-flow',
-              version: '0.2.0',
+              version: '0.2.4-alpha',
             },
           },
         };

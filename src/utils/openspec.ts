@@ -4,7 +4,7 @@
 
 import { readFileSync, readdirSync, existsSync, statSync } from 'fs';
 import { join, basename } from 'path';
-import { OpenSpecChange, ChangeListItem, TaskItem } from '../types.js';
+import { OpenSpecChange, ChangeListItem, TaskItem, ChangeIdResolution } from '../types.js';
 
 const OPENSPEC_ROOT = 'openspec';
 const CHANGES_DIR = join(OPENSPEC_ROOT, 'changes');
@@ -86,6 +86,40 @@ function analyzeChange(changeId: string, changePath: string): ChangeListItem {
     tasksCompleted,
     path: changePath,
   };
+}
+
+/**
+ * Resolve a partial change ID to the full ID
+ * Returns resolution status and matching IDs
+ */
+export function resolveChangeId(partialId: string): ChangeIdResolution {
+  // 1. Check exact match first
+  const exactPath = join(CHANGES_DIR, partialId);
+  if (existsSync(exactPath) && statSync(exactPath).isDirectory()) {
+    return { status: 'exact', changeId: partialId };
+  }
+
+  // 2. Find prefix matches from all changes
+  const changes = listChanges();
+  const prefixMatches = changes
+    .filter(c => c.changeId.startsWith(partialId))
+    .map(c => c.changeId);
+
+  if (prefixMatches.length === 1) {
+    return { status: 'resolved', changeId: prefixMatches[0] };
+  }
+
+  if (prefixMatches.length > 1) {
+    return { status: 'ambiguous', matches: prefixMatches };
+  }
+
+  // 3. No prefix matches - find similar IDs for suggestions (substring match)
+  const suggestions = changes
+    .filter(c => c.changeId.includes(partialId))
+    .map(c => c.changeId)
+    .slice(0, 5);
+
+  return { status: 'not_found', suggestions };
 }
 
 /**

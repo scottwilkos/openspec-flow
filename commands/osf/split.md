@@ -1,4 +1,5 @@
 ---
+# openspec-flow-command: v0.2.4
 description: Split a large OpenSpec change into phased sub-changes
 argument-hint: "<change-id>"
 allowed-tools: mcp__openspec-flow__analyze_change, mcp__openspec-flow__split_change
@@ -66,8 +67,8 @@ Confirm:
 ## Next Steps
 
 Implement phases in order:
-1. `/work $ARGUMENTS-phase1` to generate work brief
-2. `/implement $ARGUMENTS-phase1` to implement first phase
+1. `/osf:work $ARGUMENTS-phase1` to generate work brief
+2. `/osf:implement $ARGUMENTS-phase1` to implement first phase
 3. After phase1 complete, proceed to phase2
 4. Continue until all phases complete
 

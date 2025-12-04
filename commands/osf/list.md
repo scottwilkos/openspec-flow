@@ -1,4 +1,5 @@
 ---
+# openspec-flow-command: v0.2.4
 description: List all OpenSpec changes with status and task completion
 allowed-tools: mcp__openspec-flow__list_changes
 ---
@@ -16,5 +17,5 @@ Display results as a table:
 |-----------|-------|--------|----------|
 
 Offer next steps:
-- `/work <id>` to generate work brief
-- `/implement <id>` to start implementation
+- `/osf:work <id>` to generate work brief
+- `/osf:implement <id>` to start implementation

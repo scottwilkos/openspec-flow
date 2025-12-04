@@ -1,4 +1,5 @@
 ---
+# openspec-flow-command: v0.2.4
 description: Generate a work brief for an OpenSpec change
 argument-hint: "<change-id>"
 allowed-tools: mcp__openspec-flow__*
@@ -19,5 +20,5 @@ After generation, read the work brief from the returned path and summarize:
 - Constraints
 
 Offer next steps:
-- `/implement $ARGUMENTS` to start implementation
+- `/osf:implement $ARGUMENTS` to start implementation
 - Review specific tasks in detail

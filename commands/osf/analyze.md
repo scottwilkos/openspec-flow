@@ -1,4 +1,5 @@
 ---
+# openspec-flow-command: v0.2.4
 description: Analyze an OpenSpec change for size and complexity
 argument-hint: "<change-id>"
 allowed-tools: mcp__openspec-flow__analyze_change
@@ -55,13 +56,13 @@ If the sizing is yellow or red, display the suggested phases:
 Based on the sizing level, suggest:
 
 **If GREEN:**
-- `/work $ARGUMENTS` to generate work brief
-- `/implement $ARGUMENTS` to begin implementation
+- `/osf:work $ARGUMENTS` to generate work brief
+- `/osf:implement $ARGUMENTS` to begin implementation
 
 **If YELLOW:**
-- Consider `/split $ARGUMENTS` to decompose into phases
-- Or proceed with `/implement $ARGUMENTS` if manageable
+- Consider `/osf:split $ARGUMENTS` to decompose into phases
+- Or proceed with `/osf:implement $ARGUMENTS` if manageable
 
 **If RED:**
-- Use `/split $ARGUMENTS` to decompose into phases
+- Use `/osf:split $ARGUMENTS` to decompose into phases
 - Implement each phase separately

@@ -1,4 +1,5 @@
 ---
+# openspec-flow-command: v0.2.4
 description: Implement an OpenSpec change via Claude Flow orchestration
 argument-hint: "<change-id>"
 allowed-tools: mcp__openspec-flow__*, mcp__claude-flow__*
@@ -102,6 +103,6 @@ mcp__claude-flow__swarm_destroy()
 
 ## Next Steps
 
-- `/verify $ARGUMENTS` for E2E verification
-- `/review $ARGUMENTS` for requirements review
-- `/deferred $ARGUMENTS` to check incomplete items
+- `/osf:verify $ARGUMENTS` for E2E verification
+- `/osf:review $ARGUMENTS` for requirements review
+- `/osf:deferred $ARGUMENTS` to check incomplete items

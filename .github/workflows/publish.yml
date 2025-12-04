@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (skip actual publish)'
+        type: boolean
+        default: false
 
 permissions:
   id-token: write
@@ -30,9 +36,19 @@ jobs:
       - run: npm run build
 
       - name: Publish to npm
+        if: ${{ !inputs.dry_run }}
         run: |
-          if [[ "${{ github.ref_name }}" == *"-alpha"* ]] || [[ "${{ github.ref_name }}" == *"-beta"* ]]; then
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *"-alpha"* ]] || [[ "$VERSION" == *"-beta"* ]]; then
             npm publish --access public --tag next
           else
             npm publish --access public
           fi
+
+      - name: Dry run summary
+        if: ${{ inputs.dry_run }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Dry run - would publish version: $VERSION"
+          echo "Package contents:"
+          npm pack --dry-run
