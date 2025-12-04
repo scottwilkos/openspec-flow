@@ -120,19 +120,21 @@ export function runSetup(isGlobal: boolean): void {
 Setup complete!
 
 Usage in Claude Code:
+  /ideate <req>     Create new change from requirements
   /list-specs       List all OpenSpec changes
   /work <id>        Generate work brief for a change
+  /analyze <id>     Analyze change size/complexity
+  /split <id>       Split large change into phases
   /implement <id>   Run multi-agent implementation
   /verify <id>      E2E verification
   /review <id>      Code review against requirements
   /deferred <id>    Analyze incomplete tasks
 
 The MCP server provides these tools automatically:
-  - list_changes
-  - generate_work_brief
-  - get_change_context
-  - analyze_deferred
-  - create_flow_log
+  - list_changes, generate_work_brief, get_change_context
+  - scaffold_change, save_change_artifact
+  - analyze_change, split_change
+  - analyze_deferred, create_flow_log
 `);
 
   // Check for required claude-flow dependency
@@ -273,6 +275,9 @@ export function runUninstall(isGlobal: boolean): void {
     'deferred.md',
     'log.md',
     'osf-help.md',
+    'ideate.md',
+    'analyze.md',
+    'split.md',
   ];
 
   if (existsSync(commandsDir)) {

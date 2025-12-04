@@ -51,8 +51,11 @@ The `setup` command:
 
 | Command | Description | Requires Claude-Flow |
 |---------|-------------|---------------------|
+| `/ideate <req>` | Create new change from requirements | Optional |
 | `/list-specs` | List all OpenSpec changes with status | No |
 | `/work <id>` | Generate work brief for a change | No |
+| `/analyze <id>` | Analyze change size/complexity | No |
+| `/split <id>` | Split large change into phases | No |
 | `/implement <id>` | Implement via multi-agent swarm | **Yes** |
 | `/verify <id>` | Verify implementation via agents | **Yes** |
 | `/review <id>` | Review against requirements | **Yes** |
@@ -100,13 +103,18 @@ User: /implement CHANGE-001
 ## Workflow
 
 ```
-1. /list-specs           List available changes
-2. /work CHANGE-001      Generate work brief
-3. /implement CHANGE-001 Implement via agent swarm
-4. /verify CHANGE-001    Verify via test agents
-5. /review CHANGE-001    Review via review agents
-6. /deferred CHANGE-001  Check incomplete items
-7. /log CHANGE-001       Document implementation
+1. /ideate "feature"     Create new change from requirements
+   OR manually create openspec/changes/<id>/
+
+2. /list-specs           List available changes
+3. /analyze CHANGE-001   Check size/complexity
+4. /split CHANGE-001     Split if too large (optional)
+5. /work CHANGE-001      Generate work brief
+6. /implement CHANGE-001 Implement via agent swarm
+7. /verify CHANGE-001    Verify via test agents
+8. /review CHANGE-001    Review via review agents
+9. /deferred CHANGE-001  Check incomplete items
+10. /log CHANGE-001      Document implementation
 ```
 
 ## MCP Tools
@@ -117,7 +125,11 @@ The MCP server exposes these tools:
 |------|-------------|
 | `list_changes` | List all OpenSpec changes |
 | `generate_work_brief` | Create work brief for a change |
-| `get_change_context` | Get full context (proposal, tasks, config) |
+| `get_change_context` | Get file paths and summary |
+| `scaffold_change` | Create new change directory |
+| `save_change_artifact` | Save/update change files |
+| `analyze_change` | Analyze size and complexity |
+| `split_change` | Split into phased sub-changes |
 | `analyze_deferred` | Analyze incomplete tasks |
 | `create_flow_log` | Create implementation log |
 
