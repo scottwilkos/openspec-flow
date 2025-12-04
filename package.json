@@ -41,6 +41,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "glob": "^13.0.0",
     "yaml": "^2.3.4"
   },
   "devDependencies": {
