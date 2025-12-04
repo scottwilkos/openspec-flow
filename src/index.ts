@@ -30,7 +30,7 @@ switch (command) {
 
   case '--version':
   case '-V':
-    console.log('0.2.6-alpha');
+    console.log('0.2.7-alpha');
     break;
 
   case '--help':
@@ -51,16 +51,18 @@ Usage:
   openspec-flow uninstall -g Remove global installation
 
 After setup, use slash commands in Claude Code:
-  /ideate <req>     Create OpenSpec from requirements
-  /list-specs       List all OpenSpec changes
-  /work <id>        Generate work brief
-  /analyze <id>     Analyze change complexity
-  /split <id>       Split large change into phases
-  /implement <id>   Run implementation via claude-flow
-  /verify <id>      E2E verification via claude-flow
-  /review <id>      Code review via claude-flow
-  /deferred <id>    Analyze incomplete tasks
-  /archive <id>     Archive completed/closed change
+  /osf:ideate <req>   Create OpenSpec from requirements
+  /osf:list           List all OpenSpec changes
+  /osf:work <id>      Generate work brief
+  /osf:analyze <id>   Analyze change complexity
+  /osf:split <id>     Split large change into phases
+  /osf:implement <id> Run implementation via claude-flow
+  /osf:verify <id>    E2E verification via claude-flow
+  /osf:review <id>    Code review via claude-flow
+  /osf:deferred <id>  Analyze incomplete tasks
+  /osf:log <id>       Create implementation flow log
+  /osf:archive <id>   Archive completed/closed change
+  /osf:help           Command reference
 `);
     break;
 

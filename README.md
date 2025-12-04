@@ -1,6 +1,6 @@
 # OpenSpec-Flow
 
-[![Version](https://img.shields.io/badge/version-0.2.0--alpha-blue.svg)](https://github.com/scottwilkos/openspec-flow)
+[![npm version](https://img.shields.io/npm/v/openspec-flow.svg)](https://www.npmjs.com/package/openspec-flow)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > **Alpha Software**: APIs may change between versions.
@@ -10,113 +10,79 @@ Bridges [OpenSpec](https://openspec.dev/) (specification-driven change managemen
 ## Installation
 
 ```bash
-npm install -g openspec-flow
+npm install -g openspec-flow@next
 openspec-flow setup
 ```
 
 For project-local installation:
 ```bash
-npm install -D openspec-flow
+npm install -D openspec-flow@next
 npx openspec-flow setup
 ```
 
-### Required: Claude-Flow MCP
+### Dependencies
 
-The `/implement`, `/verify`, and `/review` commands require Claude-Flow for multi-agent orchestration:
+| Dependency | Required | Install |
+|------------|----------|---------|
+| OpenSpec CLI | Yes (for `/osf:ideate`, `/osf:archive`) | `npm install -g @anthropic/openspec` |
+| Claude-Flow MCP | For `/osf:implement`, `/osf:verify`, `/osf:review` | See below |
 
+**Claude-Flow setup:**
 ```bash
 claude mcp add claude-flow -- npx @anthropic/claude-flow@alpha mcp start
-```
-
-Or add to your `.claude/mcp.json`:
-```json
-{
-  "mcpServers": {
-    "claude-flow": {
-      "command": "npx",
-      "args": ["@anthropic/claude-flow@alpha", "mcp", "start"]
-    }
-  }
-}
 ```
 
 ## What It Does
 
 The `setup` command:
-1. Installs slash commands to `.claude/commands/`
+1. Installs slash commands to `.claude/commands/osf/`
 2. Configures the MCP server in `.mcp.json` (project) or `~/.claude.json` (global)
-3. Checks for claude-flow dependency
+3. Auto-detects project tech stack and generates config
+4. Checks for OpenSpec CLI and Claude-Flow dependencies
 
 ## Commands
 
-| Command | Description | Requires Claude-Flow |
-|---------|-------------|---------------------|
-| `/ideate <req>` | Create new change from requirements | Optional |
-| `/list-specs` | List all OpenSpec changes with status | No |
-| `/work <id>` | Generate work brief for a change | No |
-| `/analyze <id>` | Analyze change size/complexity | No |
-| `/split <id>` | Split large change into phases | No |
-| `/implement <id>` | Implement via multi-agent swarm | **Yes** |
-| `/verify <id>` | Verify implementation via agents | **Yes** |
-| `/review <id>` | Review against requirements | **Yes** |
-| `/deferred <id>` | Analyze incomplete tasks | No |
-| `/log <id>` | Create implementation flow log | No |
-| `/archive <id>` | Archive completed/closed change | No |
-| `/osf-help` | Help and command reference | No |
+All commands are namespaced under `osf:`:
 
-## Architecture
+| Command | Description | Dependencies |
+|---------|-------------|--------------|
+| `/osf:ideate <req>` | Create new change from requirements | OpenSpec CLI |
+| `/osf:list` | List all OpenSpec changes with status | - |
+| `/osf:work <id>` | Generate work brief for a change | - |
+| `/osf:analyze <id>` | Analyze change size/complexity | - |
+| `/osf:split <id>` | Split large change into phases | - |
+| `/osf:implement <id>` | Implement via multi-agent swarm | Claude-Flow |
+| `/osf:verify <id>` | Verify implementation via agents | Claude-Flow |
+| `/osf:review <id>` | Review against requirements | Claude-Flow |
+| `/osf:deferred <id>` | Analyze incomplete tasks | - |
+| `/osf:log <id>` | Create implementation flow log | - |
+| `/osf:archive <id>` | Archive completed/closed change | OpenSpec CLI |
+| `/osf:help` | Help and command reference | - |
 
+### Partial Change IDs
+
+Commands support partial change ID matching:
 ```
-User: /implement CHANGE-001
-         │
-         ▼
-┌─────────────────────────────────────────────────────┐
-│  Slash Command (allowed-tools restricted)           │
-│  - Can ONLY use: mcp__openspec-flow__*              │
-│                  mcp__claude-flow__*                │
-└─────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────┐
-│  OpenSpec-Flow MCP                                  │
-│  - get_change_context → reads spec, tasks, config   │
-│  - generate_work_brief → creates implementation doc │
-└─────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────┐
-│  Claude-Flow MCP                                    │
-│  - swarm_init → create agent swarm                  │
-│  - agent_spawn → spawn coder/tester/reviewer/etc    │
-│  - task_orchestrate → coordinate work               │
-│  - task_results → collect outcomes                  │
-│  - swarm_destroy → cleanup when done                │
-└─────────────────────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────────────────────┐
-│  Spawned Agents (via claude-flow)                   │
-│  - Agents use Read/Edit/Write/Bash for actual work  │
-│  - Orchestrated by claude-flow                      │
-└─────────────────────────────────────────────────────┘
+/osf:work fix-auth    # Matches "fix-auth-flow-20241201"
+/osf:work 001         # Matches "001-add-feature"
 ```
 
 ## Workflow
 
 ```
-1. /ideate "feature"     Create new change from requirements
+1. /osf:ideate "feature"   Create new change from requirements
    OR manually create openspec/changes/<id>/
 
-2. /list-specs           List available changes
-3. /analyze CHANGE-001   Check size/complexity
-4. /split CHANGE-001     Split if too large (optional)
-5. /work CHANGE-001      Generate work brief
-6. /implement CHANGE-001 Implement via agent swarm
-7. /verify CHANGE-001    Verify via test agents
-8. /review CHANGE-001    Review via review agents
-9. /deferred CHANGE-001  Check incomplete items
-10. /log CHANGE-001      Document implementation
-11. /archive CHANGE-001  Archive when done
+2. /osf:list               List available changes
+3. /osf:analyze CHANGE-001 Check size/complexity
+4. /osf:split CHANGE-001   Split if too large (optional)
+5. /osf:work CHANGE-001    Generate work brief
+6. /osf:implement CHANGE-001 Implement via agent swarm
+7. /osf:verify CHANGE-001  Verify via test agents
+8. /osf:review CHANGE-001  Review via review agents
+9. /osf:deferred CHANGE-001 Check incomplete items
+10. /osf:log CHANGE-001    Document implementation
+11. /osf:archive CHANGE-001 Archive when done
 ```
 
 ## MCP Tools
@@ -125,7 +91,9 @@ The MCP server exposes these tools:
 
 | Tool | Description |
 |------|-------------|
+| `get_proposal_workflow` | Get OpenSpec proposal workflow instructions |
 | `list_changes` | List all OpenSpec changes |
+| `resolve_change_id` | Resolve partial change ID to full ID |
 | `generate_work_brief` | Create work brief for a change |
 | `get_change_context` | Get file paths and summary |
 | `scaffold_change` | Create new change directory |
@@ -134,7 +102,7 @@ The MCP server exposes these tools:
 | `split_change` | Split into phased sub-changes |
 | `analyze_deferred` | Analyze incomplete tasks |
 | `create_flow_log` | Create implementation log |
-| `archive_change` | Archive completed/closed change |
+| `archive_change` | Archive via OpenSpec CLI |
 
 ## OpenSpec Structure
 
@@ -147,17 +115,18 @@ openspec/
     │   ├── proposal.md     # Change proposal
     │   ├── tasks.md        # Implementation checklist
     │   ├── design.md       # Optional design docs
-    │   ├── work-brief.md   # Generated by /work
-    │   └── flow-log.md     # Generated by /log
+    │   ├── work-brief.md   # Generated by /osf:work
+    │   ├── flow-log.md     # Generated by /osf:log
+    │   └── specs/          # Spec delta files
     └── archive/            # Archived changes
-        └── <CHANGE-ID>/
+        └── YYYY-MM-DD-<CHANGE-ID>/
             ├── ...
             └── archive-metadata.yaml
 ```
 
 ## Configuration (Optional)
 
-Project configuration in `.openspec-flow/config/`:
+Project configuration is auto-generated during setup in `.openspec-flow/config/`:
 
 ```
 .openspec-flow/config/
@@ -167,6 +136,13 @@ Project configuration in `.openspec-flow/config/`:
 ├── patterns.yaml     # Architecture patterns
 └── constraints.yaml  # Project constraints
 ```
+
+## Safe Install/Uninstall
+
+Commands are marked with an internal identifier. The setup process:
+- Detects conflicts with existing custom commands
+- Only overwrites files that belong to openspec-flow
+- Preserves user's custom commands in the `osf/` directory
 
 ## Uninstall
 
@@ -178,7 +154,8 @@ openspec-flow uninstall
 
 - Node.js >= 18.0.0
 - Claude Code
-- Claude-Flow MCP (for `/implement`, `/verify`, `/review`)
+- OpenSpec CLI (for `/osf:ideate`, `/osf:archive`)
+- Claude-Flow MCP (for `/osf:implement`, `/osf:verify`, `/osf:review`)
 
 ## License
 

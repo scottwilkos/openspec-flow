@@ -1,6 +1,6 @@
 {
   "name": "openspec-flow",
-  "version": "0.2.6-alpha",
+  "version": "0.2.7-alpha",
   "description": "Bridges OpenSpec change management with Claude Flow multi-agent orchestration via Claude Code",
   "type": "module",
   "main": "dist/index.js",
