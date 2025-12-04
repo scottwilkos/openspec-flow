@@ -1,6 +1,7 @@
 ---
 description: Create implementation flow log for an OpenSpec change
 argument-hint: "<change-id>"
+allowed-tools: mcp__openspec-flow__*, Bash
 ---
 
 # Create Flow Log: $ARGUMENTS

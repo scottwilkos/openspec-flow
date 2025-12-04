@@ -1,5 +1,6 @@
 ---
 description: List all OpenSpec changes with status and task completion
+allowed-tools: mcp__openspec-flow__list_changes
 ---
 
 # List OpenSpec Changes

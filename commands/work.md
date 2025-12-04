@@ -1,6 +1,7 @@
 ---
 description: Generate a work brief for an OpenSpec change
 argument-hint: "<change-id>"
+allowed-tools: mcp__openspec-flow__*
 ---
 
 # Generate Work Brief: $ARGUMENTS

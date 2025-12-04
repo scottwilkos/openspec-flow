@@ -5,7 +5,7 @@
 
 > **Alpha Software**: APIs may change between versions.
 
-Bridges [OpenSpec](https://openspec.dev/) (specification-driven change management) with Claude Flow (multi-agent orchestration) via Claude Code. Provides MCP tools and slash commands for automated implementation workflows.
+Bridges [OpenSpec](https://openspec.dev/) (specification-driven change management) with [Claude Flow](https://github.com/anthropics/claude-flow) (multi-agent orchestration) via Claude Code. Provides MCP tools and slash commands for automated implementation workflows.
 
 ## Installation
 
@@ -20,34 +20,93 @@ npm install -D openspec-flow
 npx openspec-flow setup
 ```
 
+### Required: Claude-Flow MCP
+
+The `/implement`, `/verify`, and `/review` commands require Claude-Flow for multi-agent orchestration:
+
+```bash
+claude mcp add claude-flow -- npx @anthropic/claude-flow@alpha mcp start
+```
+
+Or add to your `.claude/mcp.json`:
+```json
+{
+  "mcpServers": {
+    "claude-flow": {
+      "command": "npx",
+      "args": ["@anthropic/claude-flow@alpha", "mcp", "start"]
+    }
+  }
+}
+```
+
 ## What It Does
 
 The `setup` command:
 1. Installs slash commands to `.claude/commands/`
-2. Configures the MCP server in `.claude/mcp.json`
+2. Configures the MCP server in `.mcp.json` (project) or `~/.claude.json` (global)
+3. Checks for claude-flow dependency
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `/list-specs` | List all OpenSpec changes with status |
-| `/work <id>` | Generate work brief for a change |
-| `/implement <id>` | Implement the change |
-| `/verify <id>` | Verify implementation |
-| `/review <id>` | Review against requirements |
-| `/deferred <id>` | Analyze incomplete tasks |
-| `/log <id>` | Create implementation flow log |
-| `/osf-help` | Help and command reference |
+| Command | Description | Requires Claude-Flow |
+|---------|-------------|---------------------|
+| `/list-specs` | List all OpenSpec changes with status | No |
+| `/work <id>` | Generate work brief for a change | No |
+| `/implement <id>` | Implement via multi-agent swarm | **Yes** |
+| `/verify <id>` | Verify implementation via agents | **Yes** |
+| `/review <id>` | Review against requirements | **Yes** |
+| `/deferred <id>` | Analyze incomplete tasks | No |
+| `/log <id>` | Create implementation flow log | No |
+| `/osf-help` | Help and command reference | No |
+
+## Architecture
+
+```
+User: /implement CHANGE-001
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  Slash Command (allowed-tools restricted)           │
+│  - Can ONLY use: mcp__openspec-flow__*              │
+│                  mcp__claude-flow__*                │
+└─────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  OpenSpec-Flow MCP                                  │
+│  - get_change_context → reads spec, tasks, config   │
+│  - generate_work_brief → creates implementation doc │
+└─────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  Claude-Flow MCP                                    │
+│  - swarm_init → create agent swarm                  │
+│  - agent_spawn → spawn coder/tester/reviewer/etc    │
+│  - task_orchestrate → coordinate work               │
+│  - task_results → collect outcomes                  │
+│  - swarm_destroy → cleanup when done                │
+└─────────────────────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────────────────────┐
+│  Spawned Agents (via claude-flow)                   │
+│  - Agents use Read/Edit/Write/Bash for actual work  │
+│  - Orchestrated by claude-flow                      │
+└─────────────────────────────────────────────────────┘
+```
 
 ## Workflow
 
 ```
 1. /list-specs           List available changes
 2. /work CHANGE-001      Generate work brief
-3. /implement CHANGE-001 Implement the tasks
-4. /verify CHANGE-001    Verify build passes
-5. /deferred CHANGE-001  Check incomplete items
-6. /log CHANGE-001       Document implementation
+3. /implement CHANGE-001 Implement via agent swarm
+4. /verify CHANGE-001    Verify via test agents
+5. /review CHANGE-001    Review via review agents
+6. /deferred CHANGE-001  Check incomplete items
+7. /log CHANGE-001       Document implementation
 ```
 
 ## MCP Tools
@@ -100,6 +159,7 @@ openspec-flow uninstall
 
 - Node.js >= 18.0.0
 - Claude Code
+- Claude-Flow MCP (for `/implement`, `/verify`, `/review`)
 
 ## License
 
@@ -108,4 +168,5 @@ openspec-flow uninstall
 ## Related
 
 - [OpenSpec](https://openspec.dev/) - Specification-driven change management
+- [Claude Flow](https://github.com/anthropics/claude-flow) - Multi-agent orchestration
 - [Claude Code](https://claude.ai/code) - AI-powered development

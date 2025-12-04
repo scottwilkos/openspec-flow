@@ -52,7 +52,7 @@ const TOOLS = [
   },
   {
     name: 'get_change_context',
-    description: 'Get the full context for an OpenSpec change including work brief, proposal, tasks, and config',
+    description: 'Get context for an OpenSpec change: file paths, summary, and config. Agents should Read files as needed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -138,14 +138,37 @@ async function handleGenerateWorkBrief(params: { change_id: string }): Promise<u
 async function handleGetChangeContext(params: { change_id: string }): Promise<unknown> {
   const change = loadChange(params.change_id);
 
-  // Load work brief if exists
+  // Build file paths
+  const proposalPath = join(change.path, 'proposal.md');
+  const tasksPath = join(change.path, 'tasks.md');
+  const designPath = join(change.path, 'design.md');
   const workBriefPath = join(change.path, 'work-brief.md');
-  let workBrief = null;
-  if (existsSync(workBriefPath)) {
-    workBrief = readFileSync(workBriefPath, 'utf-8');
+
+  // Parse tasks to get summary counts
+  let taskCount = 0;
+  let tasksComplete = 0;
+  if (change.tasks) {
+    const lines = change.tasks.split('\n');
+    lines.forEach((line) => {
+      if (line.match(/^\s*-\s*\[x\]/i)) {
+        taskCount++;
+        tasksComplete++;
+      } else if (line.match(/^\s*-\s*\[\s*\]/i)) {
+        taskCount++;
+      }
+    });
   }
 
-  // Load config if exists
+  // Extract title from proposal (first H1)
+  let title = params.change_id;
+  if (change.proposal) {
+    const titleMatch = change.proposal.match(/^#\s+(.+)$/m);
+    if (titleMatch) {
+      title = titleMatch[1];
+    }
+  }
+
+  // Load config if exists (config is small, always include)
   let config = null;
   if (configExists()) {
     config = loadConfig();
@@ -153,11 +176,23 @@ async function handleGetChangeContext(params: { change_id: string }): Promise<un
 
   return {
     changeId: params.change_id,
-    path: change.path,
-    proposal: change.proposal,
-    tasks: change.tasks,
-    design: change.design,
-    workBrief,
+    title,
+    paths: {
+      root: change.path,
+      proposal: existsSync(proposalPath) ? proposalPath : null,
+      tasks: existsSync(tasksPath) ? tasksPath : null,
+      design: existsSync(designPath) ? designPath : null,
+      workBrief: existsSync(workBriefPath) ? workBriefPath : null,
+      specs: change.specs.length > 0 ? change.specs : null,
+    },
+    summary: {
+      taskCount,
+      tasksComplete,
+      percentComplete: taskCount > 0 ? Math.round((tasksComplete / taskCount) * 100) : 0,
+      hasWorkBrief: existsSync(workBriefPath),
+      hasDesign: existsSync(designPath),
+      specCount: change.specs.length,
+    },
     config: config
       ? {
           project: config.project,
@@ -166,6 +201,7 @@ async function handleGetChangeContext(params: { change_id: string }): Promise<un
           constraints: config.constraints,
         }
       : null,
+    instructions: 'Use the Read tool to load file contents as needed. Start with the work brief for implementation tasks.',
   };
 }
 

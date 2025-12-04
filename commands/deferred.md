@@ -1,6 +1,7 @@
 ---
 description: Analyze incomplete tasks for an OpenSpec change
 argument-hint: "<change-id>"
+allowed-tools: mcp__openspec-flow__analyze_deferred
 ---
 
 # Analyze Deferred Items: $ARGUMENTS

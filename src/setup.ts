@@ -1,6 +1,13 @@
 /**
  * Setup and uninstall functions for openspec-flow
  * Handles installation of slash commands and MCP configuration
+ *
+ * MCP Config Locations (per Claude Code docs):
+ * - Project-scoped: .mcp.json at project root
+ * - User-scoped: ~/.claude.json
+ *
+ * Commands Location:
+ * - .claude/commands/ (both project and global)
  */
 
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, copyFileSync } from 'fs';
@@ -18,35 +25,75 @@ interface McpConfig {
   mcpServers?: Record<string, {
     command: string;
     args?: string[];
-    description?: string;
+    type?: string;
   }>;
 }
 
 /**
- * Get the target directory for installation
+ * Get the commands directory for installation
  */
-function getTargetDir(isGlobal: boolean): string {
+function getCommandsDir(isGlobal: boolean): string {
   if (isGlobal) {
-    return join(homedir(), '.claude');
+    return join(homedir(), '.claude', 'commands');
   }
-  return join(process.cwd(), '.claude');
+  return join(process.cwd(), '.claude', 'commands');
+}
+
+/**
+ * Get the MCP config path
+ * - Project: .mcp.json at project root
+ * - Global: ~/.claude.json
+ */
+function getMcpConfigPath(isGlobal: boolean): string {
+  if (isGlobal) {
+    return join(homedir(), '.claude.json');
+  }
+  return join(process.cwd(), '.mcp.json');
+}
+
+/**
+ * Check if claude-flow is configured in any MCP config
+ */
+function checkClaudeFlowConfigured(): boolean {
+  const locations = [
+    join(process.cwd(), '.mcp.json'),
+    join(homedir(), '.claude.json'),
+  ];
+
+  for (const path of locations) {
+    if (existsSync(path)) {
+      try {
+        const config = JSON.parse(readFileSync(path, 'utf-8')) as McpConfig;
+        if (config.mcpServers) {
+          // Check for any claude-flow variant (claude-flow, claude-flow@alpha, etc.)
+          const hasClaudeFlow = Object.keys(config.mcpServers).some(
+            key => key.startsWith('claude-flow')
+          );
+          if (hasClaudeFlow) return true;
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+  }
+  return false;
 }
 
 /**
  * Run the setup process
  */
 export function runSetup(isGlobal: boolean): void {
-  const targetDir = getTargetDir(isGlobal);
-  const commandsDir = join(targetDir, 'commands');
-  const location = isGlobal ? 'global (~/.claude)' : 'project (.claude)';
+  const commandsDir = getCommandsDir(isGlobal);
+  const mcpConfigPath = getMcpConfigPath(isGlobal);
+  const location = isGlobal ? 'global' : 'project';
 
   console.log(`\nOpenSpec-Flow Setup`);
   console.log(`Installing to ${location}...\n`);
 
   // Clean up old installations first
-  cleanupOldInstallation(targetDir);
+  cleanupOldInstallation(isGlobal);
 
-  // Create directories
+  // Create commands directory
   if (!existsSync(commandsDir)) {
     mkdirSync(commandsDir, { recursive: true });
     console.log(`Created ${commandsDir}`);
@@ -67,7 +114,7 @@ export function runSetup(isGlobal: boolean): void {
   }
 
   // Configure MCP server
-  configureMcp(targetDir);
+  configureMcp(mcpConfigPath);
 
   console.log(`
 Setup complete!
@@ -87,22 +134,47 @@ The MCP server provides these tools automatically:
   - analyze_deferred
   - create_flow_log
 `);
+
+  // Check for required claude-flow dependency
+  if (!checkClaudeFlowConfigured()) {
+    console.log(`
+REQUIRED: Claude-Flow MCP
+
+The /implement, /verify, and /review commands require Claude-Flow for
+multi-agent orchestration. Install it with:
+
+  claude mcp add claude-flow -- npx claude-flow@alpha mcp start
+
+Or add to your .mcp.json (project) or ~/.claude.json (global):
+
+  {
+    "mcpServers": {
+      "claude-flow": {
+        "command": "npx",
+        "args": ["claude-flow@alpha", "mcp", "start"]
+      }
+    }
+  }
+
+Without claude-flow, only /list-specs, /work, /deferred, and /log will work.
+`);
+  } else {
+    console.log(`Claude-Flow detected - full orchestration available.`);
+  }
 }
 
 /**
- * Configure MCP server in mcp.json
+ * Configure MCP server in the appropriate config file
  */
-function configureMcp(targetDir: string): void {
-  const mcpPath = join(targetDir, 'mcp.json');
-
+function configureMcp(mcpConfigPath: string): void {
   let config: McpConfig = {};
 
   // Load existing config if present
-  if (existsSync(mcpPath)) {
+  if (existsSync(mcpConfigPath)) {
     try {
-      config = JSON.parse(readFileSync(mcpPath, 'utf-8'));
+      config = JSON.parse(readFileSync(mcpConfigPath, 'utf-8'));
     } catch {
-      console.warn('Warning: Could not parse existing mcp.json, creating new one');
+      console.warn('Warning: Could not parse existing config, creating new one');
     }
   }
 
@@ -115,19 +187,22 @@ function configureMcp(targetDir: string): void {
   config.mcpServers['openspec-flow'] = {
     command: 'npx',
     args: ['openspec-flow'],
-    description: 'OpenSpec change management tools',
   };
 
-  writeFileSync(mcpPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
-  console.log(`\nConfigured MCP server in ${mcpPath}`);
+  writeFileSync(mcpConfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+  console.log(`\nConfigured MCP server in ${mcpConfigPath}`);
 }
 
 /**
  * Clean up old installations (pre-0.2.0)
  */
-function cleanupOldInstallation(targetDir: string): void {
+function cleanupOldInstallation(isGlobal: boolean): void {
+  const dotClaudeDir = isGlobal
+    ? join(homedir(), '.claude')
+    : join(process.cwd(), '.claude');
+
   // Remove old namespaced commands directory
-  const oldNamespacedDir = join(targetDir, 'commands', 'openspec-flow');
+  const oldNamespacedDir = join(dotClaudeDir, 'commands', 'openspec-flow');
   if (existsSync(oldNamespacedDir)) {
     rmSync(oldNamespacedDir, { recursive: true });
     console.log(`Removed old namespaced commands: ${oldNamespacedDir}`);
@@ -145,7 +220,7 @@ function cleanupOldInstallation(targetDir: string): void {
     'openspec-flow:help.md',
   ];
 
-  const commandsDir = join(targetDir, 'commands');
+  const commandsDir = join(dotClaudeDir, 'commands');
   if (existsSync(commandsDir)) {
     for (const cmd of oldCommands) {
       const cmdPath = join(commandsDir, cmd);
@@ -155,15 +230,35 @@ function cleanupOldInstallation(targetDir: string): void {
       }
     }
   }
+
+  // Remove old .claude/mcp.json if it exists (wrong location)
+  const oldMcpPath = join(dotClaudeDir, 'mcp.json');
+  if (existsSync(oldMcpPath)) {
+    try {
+      const config = JSON.parse(readFileSync(oldMcpPath, 'utf-8')) as McpConfig;
+      if (config.mcpServers && config.mcpServers['openspec-flow']) {
+        delete config.mcpServers['openspec-flow'];
+        if (Object.keys(config.mcpServers).length === 0) {
+          rmSync(oldMcpPath);
+          console.log(`Removed old .claude/mcp.json (wrong location)`);
+        } else {
+          writeFileSync(oldMcpPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+          console.log(`Removed openspec-flow from old .claude/mcp.json`);
+        }
+      }
+    } catch {
+      // Ignore errors
+    }
+  }
 }
 
 /**
  * Run the uninstall process
  */
 export function runUninstall(isGlobal: boolean): void {
-  const targetDir = getTargetDir(isGlobal);
-  const commandsDir = join(targetDir, 'commands');
-  const location = isGlobal ? 'global (~/.claude)' : 'project (.claude)';
+  const commandsDir = getCommandsDir(isGlobal);
+  const mcpConfigPath = getMcpConfigPath(isGlobal);
+  const location = isGlobal ? 'global' : 'project';
 
   console.log(`\nOpenSpec-Flow Uninstall`);
   console.log(`Removing from ${location}...\n`);
@@ -191,22 +286,21 @@ export function runUninstall(isGlobal: boolean): void {
   }
 
   // Remove MCP configuration
-  const mcpPath = join(targetDir, 'mcp.json');
-  if (existsSync(mcpPath)) {
+  if (existsSync(mcpConfigPath)) {
     try {
-      const config: McpConfig = JSON.parse(readFileSync(mcpPath, 'utf-8'));
+      const config: McpConfig = JSON.parse(readFileSync(mcpConfigPath, 'utf-8'));
       if (config.mcpServers && config.mcpServers['openspec-flow']) {
         delete config.mcpServers['openspec-flow'];
-        writeFileSync(mcpPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
-        console.log(`\nRemoved MCP server from ${mcpPath}`);
+        writeFileSync(mcpConfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+        console.log(`\nRemoved MCP server from ${mcpConfigPath}`);
       }
     } catch {
-      console.warn('Warning: Could not update mcp.json');
+      console.warn('Warning: Could not update MCP config');
     }
   }
 
   // Clean up old installations too
-  cleanupOldInstallation(targetDir);
+  cleanupOldInstallation(isGlobal);
 
   console.log(`\nUninstall complete.`);
 }

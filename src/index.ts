@@ -35,17 +35,21 @@ openspec-flow - Bridges OpenSpec + Claude Flow via Claude Code
 
 Usage:
   openspec-flow              Start MCP server (used by Claude Code)
-  openspec-flow setup        Install to current project (.claude/)
-  openspec-flow setup -g     Install globally (~/.claude/)
+  openspec-flow setup        Install to current project
+                             - Commands: .claude/commands/
+                             - MCP config: .mcp.json
+  openspec-flow setup -g     Install globally
+                             - Commands: ~/.claude/commands/
+                             - MCP config: ~/.claude.json
   openspec-flow uninstall    Remove from current project
   openspec-flow uninstall -g Remove global installation
 
 After setup, use slash commands in Claude Code:
   /list-specs       List all OpenSpec changes
   /work <id>        Generate work brief
-  /implement <id>   Run implementation
-  /verify <id>      E2E verification
-  /review <id>      Code review
+  /implement <id>   Run implementation via claude-flow
+  /verify <id>      E2E verification via claude-flow
+  /review <id>      Code review via claude-flow
   /deferred <id>    Analyze incomplete tasks
 `);
     break;
