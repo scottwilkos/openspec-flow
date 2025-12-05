@@ -1,153 +1,164 @@
 ---
-# openspec-flow-command: v0.2.9
-description: Implement an OpenSpec change via Claude Flow swarm
+# openspec-flow-command: v0.3.0
+description: Implement an OpenSpec change via claude-flow multi-agent swarm
 argument-hint: "<change-id>"
-allowed-tools: mcp__openspec-flow__get_change_context, mcp__openspec-flow__generate_work_brief, mcp__openspec-flow__create_flow_log, mcp__claude-flow__*
+allowed-tools: mcp__openspec-flow__get_change_context, mcp__openspec-flow__generate_work_brief, mcp__openspec-flow__create_flow_log, Bash(npx claude-flow@alpha *)
 ---
 
 # Implement Change: $ARGUMENTS
 
-## CRITICAL RESTRICTIONS - READ THIS FIRST
+## How This Command Works
 
-**YOU ARE STRICTLY FORBIDDEN FROM:**
-- Using Read tool to read source code files
-- Using Write, Edit, or Update tools to modify ANY files
-- Using Bash tool to run ANY commands
-- Using Task tool to spawn agents
-- Using Glob or Grep to search the codebase
-- Implementing ANY code yourself
-- Making ANY changes to the codebase directly
+This command delegates ALL implementation work to claude-flow. You are the **orchestrator** - your job is to:
 
-**YOUR ONLY ROLE IS ORCHESTRATION:**
-1. Get change context via openspec-flow MCP
-2. Initialize the claude-flow swarm
-3. Spawn agents and orchestrate the task
-4. WAIT for the swarm to complete
-5. Report results and create flow log
+1. Gather context from openspec-flow MCP tools
+2. Ensure a work brief exists for the change
+3. Invoke claude-flow to spawn a multi-agent swarm that does the actual implementation
+4. Wait for the swarm to complete
+5. Document the results in a flow log
 
-**THE CLAUDE-FLOW SWARM DOES ALL IMPLEMENTATION WORK.**
-**YOU DO NOT TOUCH THE CODE. PERIOD.**
+**You do NOT implement code directly. The claude-flow swarm does all implementation work.**
 
-**IF YOU VIOLATE THESE RULES, THE IMPLEMENTATION FAILS.**
+claude-flow agents have full file system access. They will read the work brief, understand the tasks, and implement the changes according to the specifications.
 
 ---
 
 ## Step 1: Get Change Context
 
-Get the change context (paths, summary, config):
+First, retrieve the change context to get file paths and verify the change exists:
 
 ```
 mcp__openspec-flow__get_change_context({ change_id: "$ARGUMENTS" })
 ```
 
-If no work brief exists (`hasWorkBrief: false`), generate one first:
+This returns:
+- `paths.root` - The change directory (e.g., `openspec/changes/005-feature-name/`)
+- `paths.workBrief` - Path to work-brief.md (may be null if not generated)
+- `paths.proposal` - Path to proposal.md
+- `paths.tasks` - Path to tasks.md
+- `summary.hasWorkBrief` - Whether a work brief exists
+- `summary.taskCount` - Number of tasks to implement
+- `summary.percentComplete` - Current completion percentage
+
+**Store the `paths.root` value - you will need it for Step 3.**
+
+---
+
+## Step 2: Ensure Work Brief Exists
+
+If `summary.hasWorkBrief` is `false`, generate the work brief first:
+
 ```
 mcp__openspec-flow__generate_work_brief({ change_id: "$ARGUMENTS" })
 ```
 
-## Step 2: Initialize Agent Swarm
+The work brief is critical - it contains:
+- Summary of why and what changes
+- Complete task checklist from tasks.md
+- Technology stack context
+- Architecture patterns and constraints
+- Appendices with CLAUDE-FLOW.md configuration
 
-Initialize a hierarchical swarm for coordinated implementation:
+**The work brief is the primary context document that claude-flow agents will read.**
 
-```
-mcp__claude-flow__swarm_init({
-  topology: "hierarchical",
-  maxAgents: 5,
-  config: {
-    name: "implement-$ARGUMENTS",
-    description: "Implementation swarm for $ARGUMENTS"
-  }
-})
-```
+---
 
-## Step 3: Spawn Implementation Agents
+## Step 3: Invoke claude-flow to Implement
 
-Spawn specialized agents for the implementation:
+Now invoke claude-flow to spawn a multi-agent swarm that will implement the change.
 
-```
-mcp__claude-flow__agent_spawn({
-  type: "coder",
-  name: "implementer",
-  config: { focus: "implementation" }
-})
+**Run this exact command via Bash**, replacing `<CHANGE_DIR>` with the `paths.root` value from Step 1:
 
-mcp__claude-flow__agent_spawn({
-  type: "tester",
-  name: "verifier",
-  config: { focus: "unit-tests" }
-})
+```bash
+npx claude-flow@alpha swarm "Implement OpenSpec change $ARGUMENTS. All context is in <CHANGE_DIR> - read work-brief.md first, then implement all tasks from tasks.md. Follow the technology stack and patterns defined in the work brief. Build and test after implementation." --strategy development --max-agents 8 --parallel
 ```
 
-## Step 4: Orchestrate Implementation
-
-Pass the work brief path and instructions to the swarm:
-
-```
-mcp__claude-flow__task_orchestrate({
-  task: "Implement change $ARGUMENTS. Read the work brief at <workBrief path from step 1> and complete all tasks. Follow project patterns from config.",
-  strategy: "sequential",
-  config: {
-    validateBetweenSteps: true,
-    stopOnFailure: true
-  }
-})
+**Example with actual path:**
+```bash
+npx claude-flow@alpha swarm "Implement OpenSpec change 005-add-two-factor-auth. All context is in openspec/changes/005-add-two-factor-auth/ - read work-brief.md first, then implement all tasks from tasks.md. Follow the technology stack and patterns defined in the work brief. Build and test after implementation." --strategy development --max-agents 8 --parallel
 ```
 
-**STOP HERE. DO NOT PROCEED TO IMPLEMENT ANYTHING YOURSELF.**
+**What this does:**
+- `swarm` - Spawns a coordinated multi-agent team
+- `--strategy development` - Configures agents for development work (coding, testing)
+- `--max-agents 8` - Allows up to 8 parallel agents for complex changes
+- `--parallel` - Enables concurrent execution (2.8-4.4x speedup)
 
-The swarm will now execute the implementation. You must wait.
+**What the agents will do:**
+1. Navigate to the change directory
+2. Read `work-brief.md` to understand the full context
+3. Read `tasks.md` to see all implementation tasks
+4. Read `proposal.md` and `design.md` for requirements and design decisions
+5. Read spec deltas in `specs/` subdirectory
+6. Implement each task following project patterns
+7. Run build and tests to verify
 
-## Step 5: Wait for Swarm Completion
+**IMPORTANT**: This command spawns claude-flow agents that do the actual implementation.
+Wait for the swarm to complete before proceeding to Step 4.
 
-Poll for task completion:
+---
 
-```
-mcp__claude-flow__task_results({ taskId: "<taskId from step 4>" })
-```
+## Step 4: Create Flow Log
 
-- If status is "pending" or "in_progress": poll again after a moment
-- If status is "complete": proceed to Step 6
-- If status is "failed": report the error and stop
-
-**YOU ARE ONLY POLLING. DO NOT IMPLEMENT ANYTHING.**
-**DO NOT USE Read/Write/Edit/Bash/Task TOOLS.**
-
-## Step 6: Verify You Did Not Bypass the Swarm
-
-Before proceeding, confirm ALL of these:
-- [ ] You did NOT use Read tool on source files
-- [ ] You did NOT use Write/Edit/Update tools
-- [ ] You did NOT use Bash tool
-- [ ] You did NOT use Task tool
-- [ ] You did NOT implement any code yourself
-- [ ] ALL implementation was done by the claude-flow swarm
-
-**If you violated ANY of these, STOP immediately and report:**
-"Error: Bypassed swarm orchestration. Implementation aborted."
-
-## Step 7: Create Flow Log
-
-Document the implementation:
+After the swarm completes, document what was implemented:
 
 ```
 mcp__openspec-flow__create_flow_log({
   change_id: "$ARGUMENTS",
   status: "complete",
-  summary: "<summary from swarm results>",
-  files_modified: ["<files from results>"]
+  summary: "<Describe what the swarm implemented - list key components, features, and any notable decisions>",
+  files_modified: ["<List the files that were created or modified by the swarm>"]
 })
 ```
 
-## Step 8: Cleanup Swarm
+If the swarm encountered errors or incomplete tasks, use `status: "incomplete"` and describe what failed.
 
-Destroy the swarm when done:
+---
 
-```
-mcp__claude-flow__swarm_destroy()
-```
+## Step 5: Report Results
+
+Provide a summary to the user:
+
+**Implementation Complete: $ARGUMENTS**
+
+| Aspect | Details |
+|--------|---------|
+| Change | $ARGUMENTS |
+| Status | Complete/Incomplete |
+| Tasks Implemented | X of Y |
+| Files Modified | List key files |
+| Build Status | Pass/Fail |
+| Test Status | Pass/Fail |
+
+**Key Changes:**
+- Bullet points of what was implemented
+
+**Issues Encountered:**
+- Any problems or deferred items (or "None")
+
+---
 
 ## Next Steps
 
-- `/osf:verify $ARGUMENTS` for E2E verification
-- `/osf:review $ARGUMENTS` for requirements review
-- `/osf:deferred $ARGUMENTS` to check incomplete items
+After implementation, suggest these follow-up commands:
+
+- `/osf:verify $ARGUMENTS` - Run build and test verification via claude-flow
+- `/osf:review $ARGUMENTS` - Multi-agent code review for quality, security, and architecture
+- `/osf:deferred $ARGUMENTS` - Check for any incomplete tasks
+
+---
+
+## Troubleshooting
+
+**If claude-flow fails to start:**
+- Ensure claude-flow is installed: `npx claude-flow@alpha --version`
+- Check that the change directory exists and has a work-brief.md
+
+**If agents don't read the work brief:**
+- Verify the path in the swarm command matches `paths.root` exactly
+- Ensure work-brief.md was generated in Step 2
+
+**If implementation is incomplete:**
+- Check the flow log for errors
+- Run `/osf:deferred $ARGUMENTS` to see remaining tasks
+- Re-run `/osf:implement $ARGUMENTS` to continue

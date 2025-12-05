@@ -1,150 +1,155 @@
 ---
-# openspec-flow-command: v0.2.9
-description: Verify an OpenSpec implementation via Claude Flow swarm
+# openspec-flow-command: v0.3.0
+description: Verify an OpenSpec implementation via claude-flow multi-agent swarm
 argument-hint: "<change-id>"
-allowed-tools: mcp__openspec-flow__get_change_context, mcp__claude-flow__*
+allowed-tools: mcp__openspec-flow__get_change_context, Bash(npx claude-flow@alpha *)
 ---
 
 # Verify Change: $ARGUMENTS
 
-## CRITICAL RESTRICTIONS - READ THIS FIRST
+## How This Command Works
 
-**YOU ARE STRICTLY FORBIDDEN FROM:**
-- Using Read tool to read source code files
-- Using Write, Edit, or Update tools to modify ANY files
-- Using Bash tool to run ANY commands
-- Using Task tool to spawn agents
-- Using Glob or Grep to search the codebase
-- Running tests or builds yourself
-- Making ANY changes to the codebase directly
+This command delegates ALL verification work to claude-flow. You are the **orchestrator** - your job is to:
 
-**YOUR ONLY ROLE IS ORCHESTRATION:**
-1. Get change context via openspec-flow MCP
-2. Initialize the claude-flow swarm
-3. Spawn agents and orchestrate verification
-4. WAIT for the swarm to complete
-5. Report results
+1. Gather context from openspec-flow MCP tools
+2. Invoke claude-flow to spawn a multi-agent swarm that performs verification
+3. Wait for the swarm to complete
+4. Report the verification results to the user
 
-**THE CLAUDE-FLOW SWARM DOES ALL VERIFICATION WORK.**
-**YOU DO NOT RUN TESTS OR BUILDS. PERIOD.**
+**You do NOT run builds or tests directly. The claude-flow swarm does all verification work.**
 
-**IF YOU VIOLATE THESE RULES, THE VERIFICATION FAILS.**
+claude-flow agents have full file system access. They will read the change context, run builds, execute tests, and validate that all tasks have been properly implemented.
 
 ---
 
 ## Step 1: Get Change Context
 
-Get the change context (paths, summary, config):
+First, retrieve the change context to get file paths and current status:
 
 ```
 mcp__openspec-flow__get_change_context({ change_id: "$ARGUMENTS" })
 ```
 
-The response includes file paths. The swarm agents will read these files during verification.
+This returns:
+- `paths.root` - The change directory (e.g., `openspec/changes/005-feature-name/`)
+- `paths.workBrief` - Path to work-brief.md
+- `paths.tasks` - Path to tasks.md
+- `summary.taskCount` - Total number of tasks
+- `summary.tasksComplete` - Number of completed tasks
+- `summary.percentComplete` - Current completion percentage
+- `config.project.build` - Build command for the project
+- `config.project.test` - Test command for the project
 
-## Step 2: Initialize Verification Swarm
+**Store the `paths.root` value - you will need it for Step 2.**
 
-Initialize a swarm for coordinated verification:
+---
 
-```
-mcp__claude-flow__swarm_init({
-  topology: "mesh",
-  maxAgents: 3,
-  config: {
-    name: "verify-$ARGUMENTS",
-    description: "Verification swarm for $ARGUMENTS"
-  }
-})
-```
+## Step 2: Invoke claude-flow to Verify
 
-## Step 3: Spawn Verification Agents
+Now invoke claude-flow to spawn a multi-agent swarm that will verify the implementation.
 
-Spawn specialized agents for verification tasks:
+**Run this exact command via Bash**, replacing `<CHANGE_DIR>` with the `paths.root` value from Step 1:
 
-```
-mcp__claude-flow__agent_spawn({
-  type: "tester",
-  name: "build-verifier",
-  config: { focus: "build-verification" }
-})
-
-mcp__claude-flow__agent_spawn({
-  type: "tester",
-  name: "test-runner",
-  config: { focus: "test-execution" }
-})
-
-mcp__claude-flow__agent_spawn({
-  type: "reviewer",
-  name: "requirements-checker",
-  config: { focus: "requirements-validation" }
-})
+```bash
+npx claude-flow@alpha swarm "Verify OpenSpec change $ARGUMENTS. All context is in <CHANGE_DIR> - read work-brief.md and tasks.md. Verify: 1) Project builds successfully, 2) All tests pass, 3) Each task in tasks.md has been implemented correctly, 4) Code follows patterns defined in the work brief. Report any failures or gaps." --strategy testing --max-agents 4 --parallel
 ```
 
-## Step 4: Orchestrate Verification
-
-Run the verification workflow:
-
-```
-mcp__claude-flow__task_orchestrate({
-  task: "Verify implementation of $ARGUMENTS:\n1. Run build and check for errors\n2. Execute test suite\n3. Read tasks at <tasks path> and validate each is complete\n4. Read proposal at <proposal path> and check requirements are met",
-  strategy: "parallel",
-  config: {
-    collectAllResults: true,
-    continueOnFailure: true
-  }
-})
+**Example with actual path:**
+```bash
+npx claude-flow@alpha swarm "Verify OpenSpec change 005-add-two-factor-auth. All context is in openspec/changes/005-add-two-factor-auth/ - read work-brief.md and tasks.md. Verify: 1) Project builds successfully, 2) All tests pass, 3) Each task in tasks.md has been implemented correctly, 4) Code follows patterns defined in the work brief. Report any failures or gaps." --strategy testing --max-agents 4 --parallel
 ```
 
-**STOP HERE. DO NOT PROCEED TO RUN TESTS YOURSELF.**
+**What this does:**
+- `swarm` - Spawns a coordinated multi-agent team
+- `--strategy testing` - Configures agents for testing and verification work
+- `--max-agents 4` - Uses 4 agents for comprehensive verification
+- `--parallel` - Enables concurrent execution
 
-The swarm will now execute verification. You must wait.
+**What the agents will do:**
+1. Navigate to the change directory
+2. Read `work-brief.md` to understand the expected implementation
+3. Read `tasks.md` to see all tasks that should be complete
+4. Run the project build command and check for errors
+5. Run the test suite and check for failures
+6. Validate each task has corresponding implementation
+7. Check that code follows architecture patterns
+8. Report any discrepancies or failures
 
-## Step 5: Wait for Swarm Completion
+**IMPORTANT**: This command spawns claude-flow agents that do the actual verification.
+Wait for the swarm to complete before proceeding to Step 3.
 
-Poll for task completion:
+---
 
+## Step 3: Report Verification Results
+
+After the swarm completes, provide a comprehensive summary to the user:
+
+**Verification Results: $ARGUMENTS**
+
+| Check | Status | Details |
+|-------|--------|---------|
+| Build | Pass/Fail | Any build errors |
+| Tests | Pass/Fail | X passed, Y failed, Z skipped |
+| Task Completion | X/Y | Tasks verified as complete |
+| Pattern Compliance | Pass/Fail | Architecture pattern adherence |
+
+**Build Output:**
 ```
-mcp__claude-flow__task_results({ taskId: "<taskId from step 4>" })
+<Include relevant build output or "Build successful">
 ```
 
-- If status is "pending" or "in_progress": poll again after a moment
-- If status is "complete": proceed to Step 6
-- If status is "failed": report the error and stop
-
-**YOU ARE ONLY POLLING. DO NOT RUN ANY COMMANDS.**
-**DO NOT USE Read/Write/Edit/Bash/Task TOOLS.**
-
-## Step 6: Verify You Did Not Bypass the Swarm
-
-Before proceeding, confirm ALL of these:
-- [ ] You did NOT use Read tool on source files
-- [ ] You did NOT use Bash to run tests or builds
-- [ ] You did NOT use Task tool
-- [ ] ALL verification was done by the claude-flow swarm
-
-**If you violated ANY of these, STOP immediately and report:**
-"Error: Bypassed swarm orchestration. Verification aborted."
-
-## Step 7: Report
-
-Provide a verification summary based on swarm results:
-- Build status (pass/fail)
-- Test results
-- Tasks verified
-- Requirements coverage
-- Gaps identified
-
-## Step 8: Cleanup Swarm
-
-Destroy the swarm when done:
-
+**Test Results:**
 ```
-mcp__claude-flow__swarm_destroy()
+<Include test summary or "All tests passed">
 ```
+
+**Task Verification:**
+| Task | Status | Notes |
+|------|--------|-------|
+| Task 1 description | ✅/❌ | Implementation notes |
+| Task 2 description | ✅/❌ | Implementation notes |
+| ... | ... | ... |
+
+**Issues Found:**
+- List any problems discovered (or "No issues found")
+
+**Recommendations:**
+- Suggestions for fixing any failures
+
+---
 
 ## Next Steps
 
-- `/osf:review $ARGUMENTS` for detailed code review
-- `/osf:deferred $ARGUMENTS` to analyze incomplete items
-- Address any critical gaps before closing
+Based on verification results, suggest appropriate follow-up:
+
+**If all checks pass:**
+- `/osf:review $ARGUMENTS` - Proceed to code review
+- `/osf:archive $ARGUMENTS` - Archive if ready for completion
+
+**If there are failures:**
+- `/osf:implement $ARGUMENTS` - Re-run implementation to fix issues
+- `/osf:deferred $ARGUMENTS` - Check for incomplete tasks
+- Address specific failures before proceeding
+
+---
+
+## Troubleshooting
+
+**If build fails:**
+- Check that all dependencies are installed
+- Verify the build command in `.openspec-flow/config/project.yaml`
+- Look for syntax errors or missing files
+
+**If tests fail:**
+- Review test output for specific failures
+- Check if tests need updating for new functionality
+- Verify test configuration is correct
+
+**If tasks appear incomplete:**
+- Compare tasks.md against actual implementation
+- Check if code exists but tasks weren't marked complete
+- Re-run `/osf:implement $ARGUMENTS` if work is missing
+
+**If claude-flow fails to start:**
+- Ensure claude-flow is installed: `npx claude-flow@alpha --version`
+- Check that the change directory exists

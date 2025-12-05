@@ -1,156 +1,221 @@
 ---
-# openspec-flow-command: v0.2.9
-description: Review an OpenSpec implementation via Claude Flow swarm
+# openspec-flow-command: v0.3.0
+description: Review an OpenSpec implementation via claude-flow multi-agent swarm
 argument-hint: "<change-id>"
-allowed-tools: mcp__openspec-flow__get_change_context, mcp__claude-flow__*
+allowed-tools: mcp__openspec-flow__get_change_context, Bash(npx claude-flow@alpha *)
 ---
 
 # Review Change: $ARGUMENTS
 
-## CRITICAL RESTRICTIONS - READ THIS FIRST
+## How This Command Works
 
-**YOU ARE STRICTLY FORBIDDEN FROM:**
-- Using Read tool to read source code files
-- Using Write, Edit, or Update tools to modify ANY files
-- Using Bash tool to run ANY commands
-- Using Task tool to spawn agents
-- Using Glob or Grep to search the codebase
-- Reviewing code yourself
-- Making ANY changes to the codebase directly
+This command delegates ALL code review work to claude-flow. You are the **orchestrator** - your job is to:
 
-**YOUR ONLY ROLE IS ORCHESTRATION:**
-1. Get change context via openspec-flow MCP
-2. Initialize the claude-flow swarm
-3. Spawn agents and orchestrate review
-4. WAIT for the swarm to complete
-5. Report results
+1. Gather context from openspec-flow MCP tools
+2. Invoke claude-flow to spawn a multi-agent swarm that performs code review
+3. Wait for the swarm to complete
+4. Report the review findings to the user
 
-**THE CLAUDE-FLOW SWARM DOES ALL REVIEW WORK.**
-**YOU DO NOT READ OR ANALYZE CODE. PERIOD.**
+**You do NOT read or analyze code directly. The claude-flow swarm does all review work.**
 
-**IF YOU VIOLATE THESE RULES, THE REVIEW FAILS.**
+claude-flow agents operate in **read-only analysis mode** - they can read code, analyze patterns, and generate reports, but they cannot modify any files. This ensures a safe, non-destructive review process.
 
 ---
 
 ## Step 1: Get Change Context
 
-Get the change context (paths, summary, config):
+First, retrieve the change context to understand what was implemented:
 
 ```
 mcp__openspec-flow__get_change_context({ change_id: "$ARGUMENTS" })
 ```
 
-The response includes file paths. The swarm agents will read these files during review.
+This returns:
+- `paths.root` - The change directory (e.g., `openspec/changes/005-feature-name/`)
+- `paths.workBrief` - Path to work-brief.md
+- `paths.proposal` - Path to proposal.md with requirements
+- `paths.tasks` - Path to tasks.md
+- `paths.design` - Path to design.md (if exists)
+- `summary.taskCount` - Total number of tasks
+- `summary.percentComplete` - Completion percentage
 
-## Step 2: Initialize Review Swarm
+**Store the `paths.root` value - you will need it for Step 2.**
 
-Initialize a swarm for coordinated review:
+---
 
-```
-mcp__claude-flow__swarm_init({
-  topology: "star",
-  maxAgents: 4,
-  config: {
-    name: "review-$ARGUMENTS",
-    description: "Review swarm for $ARGUMENTS"
-  }
-})
-```
+## Step 2: Invoke claude-flow to Review
 
-## Step 3: Spawn Review Agents
+Now invoke claude-flow to spawn a multi-agent swarm that will review the implementation.
 
-Spawn specialized agents for different review aspects:
+**Run this exact command via Bash**, replacing `<CHANGE_DIR>` with the `paths.root` value from Step 1:
 
-```
-mcp__claude-flow__agent_spawn({
-  type: "reviewer",
-  name: "requirements-reviewer",
-  config: { focus: "requirements-compliance" }
-})
-
-mcp__claude-flow__agent_spawn({
-  type: "reviewer",
-  name: "architecture-reviewer",
-  config: { focus: "architecture-patterns" }
-})
-
-mcp__claude-flow__agent_spawn({
-  type: "reviewer",
-  name: "security-reviewer",
-  config: { focus: "security-audit" }
-})
-
-mcp__claude-flow__agent_spawn({
-  type: "reviewer",
-  name: "quality-reviewer",
-  config: { focus: "code-quality" }
-})
+```bash
+npx claude-flow@alpha swarm "Review OpenSpec change $ARGUMENTS. All context is in <CHANGE_DIR> - read work-brief.md and proposal.md for requirements. Perform comprehensive code review checking: 1) Requirements compliance - all proposal requirements met, 2) Architecture patterns - follows project conventions, 3) Security - no OWASP vulnerabilities, proper input validation, secure data handling, 4) Code quality - error handling, no magic values, appropriate logging, clean code. Generate detailed findings report." --strategy analysis --max-agents 4 --read-only
 ```
 
-## Step 4: Orchestrate Review
-
-Run the review workflow with the following checklist:
-
-```
-mcp__claude-flow__task_orchestrate({
-  task: "Review implementation of $ARGUMENTS. Read work brief at <workBrief path> and proposal at <proposal path>.\n\nRequirements:\n- All tasks from work brief addressed\n- Spec requirements met\n- No missing functionality\n\nArchitecture:\n- Follows project patterns from config\n- Correct layer separation\n- No violations\n\nSecurity:\n- No OWASP vulnerabilities\n- Proper input validation\n- Secure data handling\n\nCode Quality:\n- Proper error handling\n- No magic values\n- Appropriate logging",
-  strategy: "parallel",
-  config: {
-    collectAllResults: true,
-    continueOnFailure: true
-  }
-})
+**Example with actual path:**
+```bash
+npx claude-flow@alpha swarm "Review OpenSpec change 005-add-two-factor-auth. All context is in openspec/changes/005-add-two-factor-auth/ - read work-brief.md and proposal.md for requirements. Perform comprehensive code review checking: 1) Requirements compliance - all proposal requirements met, 2) Architecture patterns - follows project conventions, 3) Security - no OWASP vulnerabilities, proper input validation, secure data handling, 4) Code quality - error handling, no magic values, appropriate logging, clean code. Generate detailed findings report." --strategy analysis --max-agents 4 --read-only
 ```
 
-**STOP HERE. DO NOT PROCEED TO REVIEW CODE YOURSELF.**
+**What this does:**
+- `swarm` - Spawns a coordinated multi-agent team
+- `--strategy analysis` - Configures agents for code analysis and review
+- `--max-agents 4` - Uses 4 specialized review agents
+- `--read-only` - **Critical**: Prevents any code modifications during review
 
-The swarm will now execute the review. You must wait.
+**What the agents will do:**
+1. Navigate to the change directory
+2. Read `work-brief.md` to understand the implementation requirements
+3. Read `proposal.md` to understand the business requirements
+4. Read `design.md` for architectural decisions (if exists)
+5. Analyze the implemented code against requirements
+6. Check for security vulnerabilities (OWASP Top 10)
+7. Verify architecture pattern compliance
+8. Assess code quality and maintainability
+9. Generate comprehensive findings report
 
-## Step 5: Wait for Swarm Completion
+**The `--read-only` flag ensures agents CANNOT modify any files** - they can only read and analyze.
 
-Poll for task completion:
+**IMPORTANT**: This command spawns claude-flow agents that do the actual review.
+Wait for the swarm to complete before proceeding to Step 3.
 
-```
-mcp__claude-flow__task_results({ taskId: "<taskId from step 4>" })
-```
+---
 
-- If status is "pending" or "in_progress": poll again after a moment
-- If status is "complete": proceed to Step 6
-- If status is "failed": report the error and stop
+## Step 3: Report Review Findings
 
-**YOU ARE ONLY POLLING. DO NOT READ ANY CODE.**
-**DO NOT USE Read/Write/Edit/Bash/Task TOOLS.**
+After the swarm completes, provide a comprehensive review summary to the user:
 
-## Step 6: Verify You Did Not Bypass the Swarm
+**Code Review Results: $ARGUMENTS**
 
-Before proceeding, confirm ALL of these:
-- [ ] You did NOT use Read tool on source files
-- [ ] You did NOT use Grep/Glob to search code
-- [ ] You did NOT use Task tool
-- [ ] ALL review was done by the claude-flow swarm
+### Summary
 
-**If you violated ANY of these, STOP immediately and report:**
-"Error: Bypassed swarm orchestration. Review aborted."
+| Category | Status | Issues Found |
+|----------|--------|--------------|
+| Requirements Compliance | ✅/⚠️/❌ | X issues |
+| Architecture Patterns | ✅/⚠️/❌ | X issues |
+| Security | ✅/⚠️/❌ | X issues |
+| Code Quality | ✅/⚠️/❌ | X issues |
 
-## Step 7: Report
+**Overall Assessment**: Ready for merge / Needs attention / Requires rework
 
-Aggregate review findings from swarm results:
-- Passed checks
-- Failed checks with specific issues
-- Security concerns
-- Architecture violations
-- Recommendations
+---
 
-## Step 8: Cleanup Swarm
+### Requirements Compliance
 
-Destroy the swarm when done:
+**Status**: ✅ All requirements met / ⚠️ Minor gaps / ❌ Critical gaps
 
-```
-mcp__claude-flow__swarm_destroy()
-```
+| Requirement | Status | Notes |
+|-------------|--------|-------|
+| Requirement 1 from proposal | ✅/❌ | Implementation details |
+| Requirement 2 from proposal | ✅/❌ | Implementation details |
+| ... | ... | ... |
+
+**Findings:**
+- List specific compliance issues or "All requirements properly implemented"
+
+---
+
+### Architecture Patterns
+
+**Status**: ✅ Compliant / ⚠️ Minor deviations / ❌ Violations
+
+**Patterns Checked:**
+- Layer separation (presentation, business, data)
+- Dependency injection usage
+- Repository/service patterns
+- Error handling patterns
+- Configuration management
+
+**Findings:**
+- List any pattern violations or "All patterns correctly followed"
+
+---
+
+### Security Review
+
+**Status**: ✅ Secure / ⚠️ Minor concerns / ❌ Vulnerabilities found
+
+**OWASP Top 10 Checks:**
+| Vulnerability | Status | Notes |
+|---------------|--------|-------|
+| Injection (SQL, Command, etc.) | ✅/❌ | Details |
+| Broken Authentication | ✅/❌ | Details |
+| Sensitive Data Exposure | ✅/❌ | Details |
+| XML External Entities (XXE) | ✅/❌ | Details |
+| Broken Access Control | ✅/❌ | Details |
+| Security Misconfiguration | ✅/❌ | Details |
+| Cross-Site Scripting (XSS) | ✅/❌ | Details |
+| Insecure Deserialization | ✅/❌ | Details |
+| Using Components with Vulnerabilities | ✅/❌ | Details |
+| Insufficient Logging | ✅/❌ | Details |
+
+**Findings:**
+- List specific security concerns or "No security issues identified"
+
+---
+
+### Code Quality
+
+**Status**: ✅ High quality / ⚠️ Acceptable / ❌ Needs improvement
+
+**Quality Checks:**
+- Error handling completeness
+- Magic numbers/strings usage
+- Code documentation
+- Logging appropriateness
+- Test coverage
+- Code complexity
+- Naming conventions
+
+**Findings:**
+- List specific quality issues or "Code quality is excellent"
+
+---
+
+### Recommendations
+
+**Critical (must fix before merge):**
+1. List critical issues that block merge
+
+**Important (should fix):**
+1. List important improvements
+
+**Nice to have (future consideration):**
+1. List minor suggestions
+
+---
 
 ## Next Steps
 
-- `/osf:verify $ARGUMENTS` for E2E testing
-- `/osf:deferred $ARGUMENTS` for incomplete items
-- Address critical issues before merge
+Based on review results, suggest appropriate follow-up:
+
+**If review passes:**
+- `/osf:archive $ARGUMENTS` - Archive the completed change
+- Proceed with merge/deployment
+
+**If there are issues:**
+- `/osf:implement $ARGUMENTS` - Address critical issues
+- `/osf:verify $ARGUMENTS` - Re-verify after fixes
+- Then re-run `/osf:review $ARGUMENTS`
+
+---
+
+## Troubleshooting
+
+**If review seems incomplete:**
+- Ensure the change directory has all required files
+- Check that work-brief.md and proposal.md exist
+- Verify the swarm completed without errors
+
+**If security review flags false positives:**
+- Review the specific findings in context
+- Document exceptions in design.md if intentional
+
+**If claude-flow fails to start:**
+- Ensure claude-flow is installed: `npx claude-flow@alpha --version`
+- Check that the change directory exists
+
+**Note on read-only mode:**
+The `--read-only` flag is intentional and critical. Review agents should never modify code.
+If modifications are needed, use `/osf:implement $ARGUMENTS` instead.
