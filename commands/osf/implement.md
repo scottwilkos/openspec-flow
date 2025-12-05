@@ -1,5 +1,5 @@
 ---
-# openspec-flow-command: v0.3.0
+# openspec-flow-command: v0.3.2
 description: Implement an OpenSpec change via claude-flow multi-agent swarm
 argument-hint: "<change-id>"
 allowed-tools: mcp__openspec-flow__get_change_context, mcp__openspec-flow__generate_work_brief, mcp__openspec-flow__create_flow_log, Bash(npx claude-flow@alpha *)
@@ -13,9 +13,11 @@ This command delegates ALL implementation work to claude-flow. You are the **orc
 
 1. Gather context from openspec-flow MCP tools
 2. Ensure a work brief exists for the change
-3. Invoke claude-flow to spawn a multi-agent swarm that does the actual implementation
-4. Wait for the swarm to complete
-5. Document the results in a flow log
+3. Capture memory baseline (for verification)
+4. Invoke claude-flow to spawn a multi-agent swarm that does the actual implementation
+5. Verify completion via memory state comparison
+6. Document the results in a flow log
+7. Report results to the user
 
 **You do NOT implement code directly. The claude-flow swarm does all implementation work.**
 
@@ -63,19 +65,34 @@ The work brief is critical - it contains:
 
 ---
 
-## Step 3: Invoke claude-flow to Implement
+## Step 3: Capture Memory Baseline
+
+Before running the swarm, capture the current memory state so you can verify what work was done:
+
+```bash
+npx claude-flow@alpha memory list
+```
+
+Note the current entries (or lack thereof). After the swarm completes, you'll compare to see what was accomplished.
+
+---
+
+## Step 4: Invoke claude-flow to Implement
 
 Now invoke claude-flow to spawn a multi-agent swarm that will implement the change.
 
 **Run this exact command via Bash**, replacing `<CHANGE_DIR>` with the `paths.root` value from Step 1:
 
 ```bash
-npx claude-flow@alpha swarm "Implement OpenSpec change $ARGUMENTS. All context is in <CHANGE_DIR> - read work-brief.md first, then implement all tasks from tasks.md. Follow the technology stack and patterns defined in the work brief. Build and test after implementation." --strategy development --max-agents 8 --parallel
+npx claude-flow@alpha swarm "Implement OpenSpec change $ARGUMENTS. All context is in <CHANGE_DIR> - read work-brief.md first, then implement all tasks from tasks.md. Follow the technology stack and patterns defined in the work brief. CRITICAL: As you complete each task, update tasks.md to mark it complete by changing [ ] to [x]. Build and test after implementation." --strategy development --max-agents 8 --parallel --monitor
 ```
+
+**Timeout**: Use a 60-minute timeout for the Bash command. Large task sets may take significant time.
+The swarm will continue as long as agents are actively working.
 
 **Example with actual path:**
 ```bash
-npx claude-flow@alpha swarm "Implement OpenSpec change 005-add-two-factor-auth. All context is in openspec/changes/005-add-two-factor-auth/ - read work-brief.md first, then implement all tasks from tasks.md. Follow the technology stack and patterns defined in the work brief. Build and test after implementation." --strategy development --max-agents 8 --parallel
+npx claude-flow@alpha swarm "Implement OpenSpec change 005-add-two-factor-auth. All context is in openspec/changes/005-add-two-factor-auth/ - read work-brief.md first, then implement all tasks from tasks.md. Follow the technology stack and patterns defined in the work brief. CRITICAL: As you complete each task, update tasks.md to mark it complete by changing [ ] to [x]. Build and test after implementation." --strategy development --max-agents 8 --parallel --monitor
 ```
 
 **What this does:**
@@ -83,6 +100,7 @@ npx claude-flow@alpha swarm "Implement OpenSpec change 005-add-two-factor-auth. 
 - `--strategy development` - Configures agents for development work (coding, testing)
 - `--max-agents 8` - Allows up to 8 parallel agents for complex changes
 - `--parallel` - Enables concurrent execution (2.8-4.4x speedup)
+- `--monitor` - Real-time progress monitoring with cleaner output
 
 **What the agents will do:**
 1. Navigate to the change directory
@@ -91,14 +109,38 @@ npx claude-flow@alpha swarm "Implement OpenSpec change 005-add-two-factor-auth. 
 4. Read `proposal.md` and `design.md` for requirements and design decisions
 5. Read spec deltas in `specs/` subdirectory
 6. Implement each task following project patterns
-7. Run build and tests to verify
+7. **Mark each task complete in tasks.md as it's finished** (change `[ ]` to `[x]`)
+8. Run build and tests to verify
 
 **IMPORTANT**: This command spawns claude-flow agents that do the actual implementation.
-Wait for the swarm to complete before proceeding to Step 4.
+**When the Bash command returns, the swarm has completed.** Proceed immediately to Step 5.
+
+**OUTPUT WARNING**: The swarm output may be hundreds of lines of JSON. This is expected. **DO NOT** run build, test, or other commands yourself to "get cleaner data." Instead, take time to parse and summarize the swarm output - it contains all the information you need.
 
 ---
 
-## Step 4: Create Flow Log
+## Step 5: Verify Completion
+
+After the swarm completes, verify work was done by checking the memory state:
+
+```bash
+npx claude-flow@alpha memory list
+```
+
+**Success indicators:**
+- New memory entries with `status: "completed"` for implemented components
+- Entries showing specific features/endpoints that were created
+
+**Failure indicators:**
+- No new memory entries since baseline
+- Entries with `status: "failed"` or error messages
+- Significantly fewer entries than expected for the task count
+
+If the swarm failed or was incomplete, check the swarm output for errors before proceeding.
+
+---
+
+## Step 6: Create Flow Log
 
 After the swarm completes, document what was implemented:
 
@@ -115,7 +157,11 @@ If the swarm encountered errors or incomplete tasks, use `status: "incomplete"` 
 
 ---
 
-## Step 5: Report Results
+## Step 7: Report Results
+
+**IMPORTANT: Extract results from the swarm output. DO NOT re-implement, re-build, or re-test yourself.**
+
+The swarm already did all implementation work. Your job is to summarize what it accomplished - look at the swarm's output for files created, build results, and test results.
 
 Provide a summary to the user:
 

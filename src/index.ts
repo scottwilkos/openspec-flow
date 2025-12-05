@@ -30,7 +30,7 @@ switch (command) {
 
   case '--version':
   case '-V':
-    console.log('0.2.9-alpha');
+    console.log('0.3.2-alpha');
     break;
 
   case '--help':
